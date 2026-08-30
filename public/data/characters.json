@@ -1,0 +1,94 @@
+{
+  "version": 1,
+  "characters": [
+    {
+      "id": "memory-sentinel",
+      "name": "MEMORY SENTINEL",
+      "subtitle": "记忆守卫",
+      "icon": "shield",
+      "avatar": "Pin_Alisa.png",
+      "maxHp": 30,
+      "shield": 0,
+      "abilities": [
+        {
+          "id": "steady-mind",
+          "kind": "passive",
+          "type": "passive-start-shield",
+          "amount": 2,
+          "description": "战斗开始时获得 2 点护盾"
+        },
+        {
+          "id": "calm-recovery",
+          "kind": "passive",
+          "type": "passive-heal-per-turn",
+          "amount": 1,
+          "description": "每回合结束后回复 1 点生命"
+        }
+      ]
+    },
+    {
+      "id": "ember-striker",
+      "name": "EMBER STRIKER",
+      "subtitle": "余烬行者",
+      "icon": "flame",
+      "avatar": "Pin_AnAn.png",
+      "maxHp": 28,
+      "shield": 0,
+      "abilities": [
+        {
+          "id": "ember-burst",
+          "kind": "active",
+          "type": "active-damage",
+          "amount": 7,
+          "cooldown": 3,
+          "description": "主动：对敌人造成 7 点伤害，冷却 3 回合"
+        }
+      ]
+    },
+    {
+      "id": "ward-weaver",
+      "name": "WARD WEAVER",
+      "subtitle": "护盾编织者",
+      "icon": "eye",
+      "avatar": "Pin_Coco.png",
+      "maxHp": 26,
+      "shield": 1,
+      "abilities": [
+        {
+          "id": "woven-ward",
+          "kind": "active",
+          "type": "active-shield",
+          "amount": 8,
+          "cooldown": 2,
+          "description": "主动：获得 8 点护盾，冷却 2 回合"
+        },
+        {
+          "id": "iron-memory",
+          "kind": "passive",
+          "type": "passive-max-hp",
+          "amount": 4,
+          "description": "最大生命增加 4 点"
+        }
+      ]
+    },
+    {
+      "id": "recall-medic",
+      "name": "RECALL MEDIC",
+      "subtitle": "回忆医师",
+      "icon": "crown",
+      "avatar": "Pin_Ema.png",
+      "maxHp": 30,
+      "shield": 0,
+      "abilities": [
+        {
+          "id": "quick-recall",
+          "kind": "active",
+          "type": "active-heal",
+          "amount": 6,
+          "cooldown": 3,
+          "description": "主动：回复 6 点生命，冷却 3 回合"
+        }
+      ]
+    }
+  ]
+}
