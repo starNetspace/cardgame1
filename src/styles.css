@@ -266,6 +266,13 @@ body { color: var(--cream); background: var(--bg); }
 .game-card-wrap.effect-boost .game-card { border-top-color: var(--orange); }
 .game-card-wrap.effect-draw .game-card { border-top-color: #a78bbd; }
 .game-card-wrap.effect-heal .game-card { border-top-color: var(--cyan); }
+.review-badge { position: absolute; top: -10px; left: 10px; z-index: 2; padding: 2px 8px; border-radius: 3px; color: #0d1c1e; font: 10px 'DM Mono'; letter-spacing: .06em; }
+.review-badge.source-due { background: var(--orange); }
+.review-badge.source-requeue { background: var(--red); color: #fffaf5; }
+.game-card-wrap.quality-bronze { outline: 2px solid rgba(183,123,86,.6); outline-offset: 2px; }
+.game-card-wrap.quality-silver { outline: 2px solid rgba(143,147,161,.6); outline-offset: 2px; }
+.game-card-wrap.quality-gold { outline: 2px solid rgba(197,150,85,.65); outline-offset: 2px; }
+.game-card-wrap.quality-mastered { outline: 2px solid rgba(132,229,208,.6); outline-offset: 2px; }
 
 @media (max-width: 560px) {
   .mode-page { padding: 38px 20px 60px; }
@@ -311,6 +318,9 @@ body { color: var(--cream); background: var(--bg); }
 .mistake-book-heading p { margin: 0; color: var(--muted); line-height: 1.6; }
 .mistake-book-total { display: flex; align-items: baseline; gap: 8px; padding-bottom: 4px; color: var(--muted); font: 11px 'DM Mono'; white-space: nowrap; }
 .mistake-book-total strong { color: var(--red); font: 600 34px 'DM Mono'; }
+.mistake-book-review { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; padding-bottom: 4px; }
+.mistake-book-review small { color: var(--muted); font: 10px 'DM Mono'; }
+.review-next-due { margin: 0 0 16px; color: var(--muted); font: 12px 'DM Mono'; }
 .mistake-book-tabs { display: flex; gap: 22px; margin-top: 42px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .mistake-book-tabs button { position: relative; min-height: 48px; padding: 0 2px; color: var(--muted); border: 0; background: transparent; font: 11px 'DM Mono'; }
 .mistake-book-tabs button::after { content: ''; position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; background: transparent; }

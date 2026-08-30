@@ -1,4 +1,4 @@
-import type { BattleMode, BattleState, BattleStore, CardFace, CardMemoryHistoryEntry, CardMemoryQuality, CardMemoryRecord, CardMemoryStore, EnemyDefinition, LearningCardMemory, LearningStore, ReviewRecord, ReviewStore } from '../types'
+import type { BattleMode, BattleState, BattleStore, CardFace, CardMemoryAnswerSource, CardMemoryHistoryEntry, CardMemoryQuality, CardMemoryRecord, CardMemoryStore, CardSource, EnemyDefinition, LearningCardMemory, LearningStore, ReviewRecord, ReviewSession, ReviewStore } from '../types'
 import { isEnemyDefinition, isCharacterDefinition } from './data'
 import { DEFAULT_CHARACTER } from './rules'
 
@@ -308,11 +308,69 @@ export function allReviewStats(store: ReviewStore) {
 const CARD_MEMORY_STORAGE_KEY = 'records'
 export const MAX_CARD_MEMORY_HISTORY = 100
 const CARD_MEMORY_QUALITIES: CardMemoryQuality[] = ['bronze', 'silver', 'gold', 'mastered']
+
+export const DAY_MS = 24 * 60 * 60 * 1000
+export const HOUR_MS = 60 * 60 * 1000
+export const MINUTE_MS = 60 * 1000
+export const MIN_DUE_LEAD_MS = 30 * MINUTE_MS
+
+// 0-based interval table. The 0 entry for bronze means "当日稍后" (same day).
+// Upgrade happens as soon as streak reaches the level's table length.
 const CARD_MEMORY_INTERVALS: Record<CardMemoryQuality, number[]> = {
-  bronze: [4 * 60 * 60 * 1000, 24 * 60 * 60 * 1000, 3 * 24 * 60 * 60 * 1000],
-  silver: [24 * 60 * 60 * 1000, 3 * 24 * 60 * 60 * 1000, 7 * 24 * 60 * 60 * 1000, 14 * 24 * 60 * 60 * 1000],
-  gold: [30 * 24 * 60 * 60 * 1000, 60 * 24 * 60 * 60 * 1000, 90 * 24 * 60 * 60 * 1000],
-  mastered: [90 * 24 * 60 * 60 * 1000, 180 * 24 * 60 * 60 * 1000],
+  bronze: [0, 1, 2, 4],
+  silver: [7, 10, 14, 21],
+  gold: [21, 30, 45],
+  mastered: [60, 90],
+}
+
+function startOfDayMs(now: number): number {
+  const date = new Date(now)
+  date.setHours(0, 0, 0, 0)
+  return date.getTime()
+}
+
+function endOfDayMs(now: number): number {
+  const date = new Date(now)
+  date.setHours(23, 59, 59, 999)
+  return date.getTime()
+}
+
+function sameDayDueAt(now: number, rng: () => number): number {
+  // 当日稍后：当天 23:59 减去随机 0~2 小时。
+  const due = endOfDayMs(now) - Math.floor(rng() * 2 * HOUR_MS)
+  const minimum = now + MIN_DUE_LEAD_MS
+  if (due >= minimum) return due
+  // 临近深夜无法满足下限时，顺延至次日 06:00~09:00。
+  return startOfDayMs(now) + DAY_MS + (6 + Math.floor(rng() * 3)) * HOUR_MS
+}
+
+function crossDayDueAt(now: number, days: number, rng: () => number): number {
+  // 跨天间隔：±10% 抖动作用于天级间隔，落在目标日 00:00 + 随机 6~18 小时。
+  const jitteredDays = days * (0.9 + 0.2 * rng())
+  const targetStart = startOfDayMs(now) + Math.round(jitteredDays) * DAY_MS
+  const due = targetStart + (6 + Math.floor(rng() * 12)) * HOUR_MS
+  return Math.max(due, now + MIN_DUE_LEAD_MS)
+}
+
+function intervalDays(quality: CardMemoryQuality, streak: number): number {
+  const intervals = CARD_MEMORY_INTERVALS[quality]
+  return intervals[Math.min(Math.max(streak, 0), intervals.length - 1)]
+}
+
+function computeDueAt(quality: CardMemoryQuality, streak: number, now: number, rng: () => number): number {
+  const days = intervalDays(quality, streak)
+  if (days === 0) return sameDayDueAt(now, rng)
+  return crossDayDueAt(now, days, rng)
+}
+
+function nextQuality(quality: CardMemoryQuality): CardMemoryQuality {
+  const index = CARD_MEMORY_QUALITIES.indexOf(quality)
+  return CARD_MEMORY_QUALITIES[Math.min(index + 1, CARD_MEMORY_QUALITIES.length - 1)]
+}
+
+function prevQuality(quality: CardMemoryQuality): CardMemoryQuality {
+  const index = CARD_MEMORY_QUALITIES.indexOf(quality)
+  return CARD_MEMORY_QUALITIES[Math.max(index - 1, 0)]
 }
 
 function isCardMemoryQuality(value: unknown): value is CardMemoryQuality {
@@ -332,7 +390,9 @@ function normalizeCardMemoryRecord(value: unknown, cardId: string): CardMemoryRe
   if (!value || typeof value !== 'object') return null
   const record = value as CardMemoryRecord
   if (record.cardId !== cardId || !isCardMemoryQuality(record.quality) || !Number.isInteger(record.streak) || record.streak < 0 || !Number.isFinite(record.dueAt) || !Number.isInteger(record.lapses) || record.lapses < 0) return null
-  return { cardId, quality: record.quality, streak: record.streak, dueAt: record.dueAt, history: normalizeCardMemoryHistory(record.history), lapses: record.lapses }
+  // 老数据迁移：streak 若超出新表长度则截断；不触发补升级或回退。
+  const streak = Math.min(record.streak, CARD_MEMORY_INTERVALS[record.quality].length - 1)
+  return { cardId, quality: record.quality, streak, dueAt: record.dueAt, history: normalizeCardMemoryHistory(record.history), lapses: record.lapses }
 }
 
 export function normalizeCardMemoryStore(value: unknown): CardMemoryStore {
@@ -358,25 +418,43 @@ export function saveCardMemoryStore(store: CardMemoryStore, username = activeUse
   try { localStorage.setItem(accountStorageKey(CARD_MEMORY_STORAGE_KEY, username), JSON.stringify(store)) } catch { /* local-only storage can be unavailable */ }
 }
 
-function qualityIndex(quality: CardMemoryQuality): number {
-  return CARD_MEMORY_QUALITIES.indexOf(quality)
+export interface CardMemoryAnswerOptions {
+  abandoned?: boolean
+  source?: CardMemoryAnswerSource
+  rng?: () => number
 }
 
-function intervalFor(quality: CardMemoryQuality, streak: number): number {
-  const intervals = CARD_MEMORY_INTERVALS[quality]
-  return intervals[Math.min(Math.max(streak - 1, 0), intervals.length - 1)]
-}
-
-export function updateCardMemory(store: CardMemoryStore, cardId: string, face: CardFace, correct: boolean, now = Date.now(), abandoned = false): CardMemoryStore {
+export function updateCardMemory(store: CardMemoryStore, cardId: string, face: CardFace, correct: boolean, now = Date.now(), options: CardMemoryAnswerOptions = {}): CardMemoryStore {
+  const rng = options.rng ?? Math.random
+  const source = options.source ?? 'due'
+  const abandoned = options.abandoned ?? false
   const previous = store[cardId]
+
+  // 局内重现走轻记账：仅追加 history，不动 quality/streak/dueAt/lapses。
+  if (source === 'requeue') {
+    if (!previous) return store
+    const history = [...previous.history, { at: now, correct, face, abandoned: abandoned || undefined, quality: previous.quality, streak: previous.streak, dueAt: previous.dueAt }].slice(-MAX_CARD_MEMORY_HISTORY)
+    return { ...store, [cardId]: { ...previous, history } }
+  }
+
+  // 普通新题沿用一期规则：答对但无档不建档。
   if (!previous && correct) return store
   const base: CardMemoryRecord = previous ?? { cardId, quality: 'bronze', streak: 0, dueAt: now, history: [], lapses: 0 }
-  const streak = correct ? base.streak + 1 : 0
-  const threshold: Record<CardMemoryQuality, number> = { bronze: 3, silver: 4, gold: 3, mastered: Number.POSITIVE_INFINITY }
-  const quality = correct && streak >= threshold[base.quality]
-    ? CARD_MEMORY_QUALITIES[Math.min(qualityIndex(base.quality) + 1, CARD_MEMORY_QUALITIES.length - 1)]
-    : correct ? base.quality : CARD_MEMORY_QUALITIES[Math.max(0, qualityIndex(base.quality) - 1)]
-  const dueAt = now + intervalFor(quality, correct ? streak : 1)
+  let quality: CardMemoryQuality
+  let streak: number
+  if (correct) {
+    streak = base.streak + 1
+    if (streak >= CARD_MEMORY_INTERVALS[base.quality].length && base.quality !== 'mastered') {
+      quality = nextQuality(base.quality)
+      streak = 0
+    } else {
+      quality = base.quality
+    }
+  } else {
+    quality = prevQuality(base.quality)
+    streak = 0
+  }
+  const dueAt = computeDueAt(quality, streak, now, rng)
   const history = [...base.history, { at: now, correct, face, abandoned: abandoned || undefined, quality, streak, dueAt }].slice(-MAX_CARD_MEMORY_HISTORY)
   return { ...store, [cardId]: { cardId, quality, streak, dueAt, history, lapses: base.lapses + (correct ? 0 : 1) } }
 }
@@ -400,4 +478,131 @@ export function getCardMemorySummary(store: CardMemoryStore, now = Date.now()) {
   const records = Object.values(store)
   const byQuality = Object.fromEntries(CARD_MEMORY_QUALITIES.map((quality) => [quality, records.filter((record) => record.quality === quality).length])) as Record<CardMemoryQuality, number>
   return { total: records.length, due: records.filter((record) => record.dueAt <= now).length, lapses: records.reduce((sum, record) => sum + record.lapses, 0), byQuality }
+}
+
+/** Sorted due card ids (earliest dueAt first), excluding nothing. Callers filter by known card ids. */
+export function getDueCardIds(store: CardMemoryStore, now = Date.now()): string[] {
+  return Object.values(store)
+    .filter((record) => record.dueAt <= now)
+    .sort((a, b) => a.dueAt - b.dueAt || a.cardId.localeCompare(b.cardId))
+    .map((record) => record.cardId)
+}
+
+export function getDueCards(store: CardMemoryStore, now = Date.now(), limit?: number): string[] {
+  const ids = getDueCardIds(store, now)
+  return Number.isInteger(limit) && (limit as number) > 0 ? ids.slice(0, limit) : ids
+}
+
+export function getNextDueAt(store: CardMemoryStore, now = Date.now()): number | null {
+  const future = Object.values(store).map((record) => record.dueAt).filter((dueAt) => dueAt > now)
+  if (future.length === 0) return null
+  return Math.min(...future)
+}
+
+export function dueCardCount(store: CardMemoryStore, now = Date.now()): number {
+  return Object.values(store).filter((record) => record.dueAt <= now).length
+}
+
+export const MAX_REQUEUE_PER_CARD = 2
+const REQUEUE_MIN_DELAY = 5
+const REQUEUE_MAX_DELAY = 8
+
+export function createReviewSession(): ReviewSession {
+  return { newSinceReview: 0, requeueReady: [], requeueScheduled: [], requeueShown: {}, answeredCount: 0, dueUsed: [] }
+}
+
+/** Record an in-session answer; schedule a requeue (5~8 questions later) for wrong answers, capped at 2 per card. */
+export function recordAnswer(session: ReviewSession, cardId: string, correct: boolean, rng: () => number = Math.random): ReviewSession {
+  const next: ReviewSession = {
+    ...session,
+    requeueReady: [...session.requeueReady],
+    requeueScheduled: session.requeueScheduled.map((item) => ({ ...item })),
+    requeueShown: { ...session.requeueShown },
+    dueUsed: [...session.dueUsed],
+    answeredCount: session.answeredCount + 1,
+  }
+  if (!correct && (next.requeueShown[cardId] ?? 0) < MAX_REQUEUE_PER_CARD) {
+    const delay = REQUEUE_MIN_DELAY + Math.floor(rng() * (REQUEUE_MAX_DELAY - REQUEUE_MIN_DELAY + 1))
+    next.requeueScheduled.push({ cardId, showAtAnswer: next.answeredCount + delay })
+  }
+  return next
+}
+
+export interface DealtCard {
+  cardId: string
+  source: CardSource
+}
+
+export interface PlanDealOptions {
+  fourNewOneOld?: boolean
+}
+
+/** Decide which cards to deal next: requeue first, then due injection per four-new-one-old, then new cards. */
+export function planDeal(session: ReviewSession, newCardIds: string[], dueCardIds: string[], desired: number, options: PlanDealOptions = {}): { dealt: DealtCard[]; nextSession: ReviewSession } {
+  const fourNewOneOld = options.fourNewOneOld ?? true
+  const next: ReviewSession = {
+    ...session,
+    requeueReady: [...session.requeueReady],
+    requeueScheduled: session.requeueScheduled.map((item) => ({ ...item })),
+    requeueShown: { ...session.requeueShown },
+    dueUsed: [...session.dueUsed],
+  }
+  const promotedIds = next.requeueScheduled.filter((item) => item.showAtAnswer <= next.answeredCount).map((item) => item.cardId)
+  next.requeueScheduled = next.requeueScheduled.filter((item) => item.showAtAnswer > next.answeredCount)
+  const ready = [...next.requeueReady, ...promotedIds]
+  next.requeueReady = []
+
+  const requeueIds = new Set([...next.requeueScheduled.map((item) => item.cardId), ...ready])
+  const dueQueue = dueCardIds.filter((id) => !next.dueUsed.includes(id) && !requeueIds.has(id))
+  const newQueue = [...newCardIds]
+  const dealt: DealtCard[] = []
+
+  for (let index = 0; index < desired; index += 1) {
+    if (ready.length > 0) {
+      const cardId = ready.shift() as string
+      if ((next.requeueShown[cardId] ?? 0) < MAX_REQUEUE_PER_CARD) {
+        next.requeueShown[cardId] = (next.requeueShown[cardId] ?? 0) + 1
+        dealt.push({ cardId, source: 'requeue' })
+        continue
+      }
+    }
+    const dueEligible = fourNewOneOld ? next.newSinceReview >= 4 : true
+    if (dueEligible && dueQueue.length > 0) {
+      const cardId = dueQueue.shift() as string
+      next.dueUsed.push(cardId)
+      next.newSinceReview = 0
+      dealt.push({ cardId, source: 'due' })
+      continue
+    }
+    if (newQueue.length > 0) {
+      const cardId = newQueue.shift() as string
+      next.newSinceReview += 1
+      dealt.push({ cardId, source: 'new' })
+      continue
+    }
+    if (dueQueue.length > 0) {
+      const cardId = dueQueue.shift() as string
+      next.dueUsed.push(cardId)
+      dealt.push({ cardId, source: 'due' })
+      continue
+    }
+    break
+  }
+  next.requeueReady = ready
+  return { dealt, nextSession: next }
+}
+
+/** At session end, requeue cards that were never re-shown become due "当日稍后". */
+export function settleUnshownRequeue(store: CardMemoryStore, session: ReviewSession, now: number, rng: () => number = Math.random): CardMemoryStore {
+  const unshown = new Set<string>()
+  for (const item of session.requeueScheduled) unshown.add(item.cardId)
+  for (const cardId of session.requeueReady) unshown.add(cardId)
+  let next = store
+  for (const cardId of unshown) {
+    const record = next[cardId]
+    if (!record) continue
+    const dueAt = sameDayDueAt(now, rng)
+    next = { ...next, [cardId]: { ...record, dueAt } }
+  }
+  return next
 }
