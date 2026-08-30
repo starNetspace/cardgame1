@@ -1,10 +1,10 @@
-import type { AccountExport, AccountInfo, AccountRegistry, BattleStore, LearningStore, ReviewStore } from '../types'
-import { getActiveUsername, loadBattleStore, loadLearningStore, loadReviewStore, normalizeUsername, saveBattleStore, saveLearningStore, saveReviewStore, setActiveUsername } from './review'
+import type { AccountExport, AccountInfo, AccountRegistry, BattleStore, CardMemoryStore, LearningStore, ReviewStore } from '../types'
+import { getActiveUsername, loadBattleStore, loadCardMemoryStore, loadLearningStore, loadReviewStore, normalizeUsername, saveBattleStore, saveCardMemoryStore, saveLearningStore, saveReviewStore, setActiveUsername } from './review'
 
 const ACCOUNT_REGISTRY_KEY = 'lexicon-duel-accounts-v1'
 const DEFAULT_USERNAME = 'default'
 
-function accountKey(username: string, kind: 'review' | 'learning' | 'battles'): string {
+function accountKey(username: string, kind: 'review' | 'learning' | 'battles' | 'records'): string {
   return `lexicon-duel-account-v1:${encodeURIComponent(normalizeUsername(username) || DEFAULT_USERNAME)}:${kind}`
 }
 
@@ -72,6 +72,7 @@ export function deleteAccount(registry: AccountRegistry, username: string): Acco
     localStorage.removeItem(accountKey(normalized, 'review'))
     localStorage.removeItem(accountKey(normalized, 'learning'))
     localStorage.removeItem(accountKey(normalized, 'battles'))
+    localStorage.removeItem(accountKey(normalized, 'records'))
   } catch { /* local-only storage can be unavailable */ }
   const activeUsername = registry.activeUsername === normalized ? DEFAULT_USERNAME : registry.activeUsername
   const next = { ...registry, activeUsername, accounts }
@@ -80,8 +81,8 @@ export function deleteAccount(registry: AccountRegistry, username: string): Acco
   return next
 }
 
-export function accountData(username = getActiveUsername()): { review: ReviewStore; learning: LearningStore; battles: BattleStore } {
-  return { review: loadReviewStore(username), learning: loadLearningStore(username), battles: loadBattleStore(username) }
+export function accountData(username = getActiveUsername()): { review: ReviewStore; learning: LearningStore; battles: BattleStore; records: CardMemoryStore } {
+  return { review: loadReviewStore(username), learning: loadLearningStore(username), battles: loadBattleStore(username), records: loadCardMemoryStore(username) }
 }
 
 export function createAccountExport(username = getActiveUsername(), exportedAt = Date.now()): AccountExport {
@@ -103,11 +104,16 @@ function isBattleStore(value: unknown): value is BattleStore {
   return Boolean(value && typeof value === 'object')
 }
 
+function isCardMemoryStore(value: unknown): value is CardMemoryStore {
+  return Boolean(value && typeof value === 'object')
+}
+
 export function parseAccountExport(value: unknown): AccountExport | null {
   if (!value || typeof value !== 'object') return null
   const data = value as Partial<AccountExport>
   if (data.format !== 'lexicon-duel-account' || data.version !== 1 || typeof data.username !== 'string' || !normalizeUsername(data.username)) return null
   if (!isReviewStore(data.review) || !isLearningStore(data.learning) || !isBattleStore(data.battles)) return null
+  if (data.records !== undefined && !isCardMemoryStore(data.records)) return null
   return data as AccountExport
 }
 
@@ -121,8 +127,8 @@ export function importAccountData(registry: AccountRegistry, data: AccountExport
   setActiveUsername(username)
   saveReviewStore(data.review, username)
   saveLearningStore(data.learning, username)
-  // Write the complete document at once so multiple learning deck slots survive import.
   saveBattleStore(data.battles, username)
+  saveCardMemoryStore(data.records ?? {}, username)
   saveAccountRegistry(nextRegistry)
   return nextRegistry
 }

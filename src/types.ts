@@ -115,6 +115,29 @@ export interface ReviewRecord {
 
 export type ReviewStore = Record<string, ReviewRecord>
 
+export interface CardMemoryHistoryEntry {
+  at: number
+  correct: boolean
+  face: CardFace
+  abandoned?: boolean
+  quality: CardMemoryQuality
+  streak: number
+  dueAt: number
+}
+
+export type CardMemoryQuality = 'bronze' | 'silver' | 'gold' | 'mastered'
+
+export interface CardMemoryRecord {
+  cardId: string
+  quality: CardMemoryQuality
+  streak: number
+  dueAt: number
+  history: CardMemoryHistoryEntry[]
+  lapses: number
+}
+
+export type CardMemoryStore = Record<string, CardMemoryRecord>
+
 export interface StudySubgroup {
   subgroupId: string
   title: string
@@ -240,4 +263,5 @@ export interface AccountExport {
   review: ReviewStore
   learning: LearningStore
   battles: BattleStore
+  records?: CardMemoryStore
 }
