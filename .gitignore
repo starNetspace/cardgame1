@@ -3,4 +3,11 @@ dist/
 *.local
 .idea/
 public/audio/
-scripts/audio_failures.txt
+tools/audio/audio_failures.txt
+
+# Local-only account exports and browser data backups.
+.local/
+accounts/
+data/local/
+src/accounts/local/
+*.account.json

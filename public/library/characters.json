@@ -1,0 +1,90 @@
+{
+  "version": 2,
+  "selectedCharacterId": "memory-sentinel",
+  "characters": [
+    {
+      "id": "ember-striker",
+      "name": "EMBER STRIKER",
+      "subtitle": "安安",
+      "avatar": "Pin_AnAn.png",
+      "maxHp": 28,
+      "shield": 0,
+      "abilities": [
+        { "id": "ember-burst", "kind": "active", "type": "active-damage", "amount": 7, "cooldown": 3, "description": "主动：对敌人造成 7 点伤害，冷却 3 回合" },
+        { "id": "heated-edges", "kind": "passive", "type": "passive-card-bonus", "amount": 1, "description": "攻击牌和防御牌数值 +1" }
+      ]
+    },
+    {
+      "id": "memory-sentinel",
+      "name": "MEMORY SENTINEL",
+      "subtitle": "亚里沙",
+      "avatar": "Pin_Alisa.png",
+      "maxHp": 30,
+      "shield": 0,
+      "abilities": [
+        { "id": "steady-mind", "kind": "passive", "type": "passive-start-shield", "amount": 2, "description": "战斗开始时获得 2 点护盾" },
+        { "id": "calm-recovery", "kind": "passive", "type": "passive-heal-per-turn", "amount": 1, "description": "每回合结束后回复 1 点生命" }
+      ]
+    },
+    {
+      "id": "ward-weaver",
+      "name": "WARD WEAVER",
+      "subtitle": "可可",
+      "avatar": "Pin_Coco.png",
+      "maxHp": 26,
+      "shield": 1,
+      "abilities": [
+        { "id": "woven-ward", "kind": "active", "type": "active-shield", "amount": 8, "cooldown": 2, "description": "主动：获得 8 点护盾，冷却 2 回合" },
+        { "id": "iron-memory", "kind": "passive", "type": "passive-max-hp", "amount": 4, "description": "最大生命增加 4 点" }
+      ]
+    },
+    {
+      "id": "recall-medic",
+      "name": "RECALL MEDIC",
+      "subtitle": "艾玛",
+      "avatar": "Pin_Ema.png",
+      "maxHp": 30,
+      "shield": 0,
+      "abilities": [
+        { "id": "quick-recall", "kind": "active", "type": "active-heal", "amount": 6, "cooldown": 3, "description": "主动：回复 6 点生命，冷却 3 回合" },
+        { "id": "field-triage", "kind": "passive", "type": "passive-heal-per-turn", "amount": 1, "description": "每回合结束后回复 1 点生命" }
+      ]
+    },
+    {
+      "id": "focus-archivist",
+      "name": "FOCUS ARCHIVIST",
+      "subtitle": "汉娜",
+      "avatar": "Pin_Hanna.png",
+      "maxHp": 27,
+      "shield": 0,
+      "abilities": [
+        { "id": "deep-focus", "kind": "passive", "type": "passive-card-bonus", "amount": 1, "description": "攻击牌和防御牌数值 +1" },
+        { "id": "focus-strike", "kind": "active", "type": "active-damage", "amount": 5, "cooldown": 2, "description": "主动：对敌人造成 5 点伤害，冷却 2 回合" }
+      ]
+    },
+    {
+      "id": "aegis-runner",
+      "name": "AEGIS RUNNER",
+      "subtitle": "蕾雅",
+      "avatar": "Pin_Leia.png",
+      "maxHp": 29,
+      "shield": 2,
+      "abilities": [
+        { "id": "opening-aegis", "kind": "passive", "type": "passive-start-shield", "amount": 3, "description": "战斗开始时额外获得 3 点护盾" },
+        { "id": "emergency-ward", "kind": "active", "type": "active-shield", "amount": 6, "cooldown": 2, "description": "主动：获得 6 点护盾，冷却 2 回合" }
+      ]
+    },
+    {
+      "id": "last-recall",
+      "name": "LAST RECALL",
+      "subtitle": "雪莉",
+      "avatar": "Pin_Sherry.png",
+      "maxHp": 25,
+      "shield": 0,
+      "abilities": [
+        { "id": "last-stand", "kind": "passive", "type": "passive-max-hp", "amount": 5, "description": "最大生命增加 5 点" },
+        { "id": "final-answer", "kind": "active", "type": "active-heal", "amount": 8, "cooldown": 4, "description": "主动：回复 8 点生命，冷却 4 回合" }
+      ]
+    }
+  ]
+}
