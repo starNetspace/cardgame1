@@ -3,11 +3,11 @@ import { BarChart3, BookOpen, Check, ChevronRight, CircleHelp, Crosshair, Downlo
 import { buildQuestion, isSpellingCorrect } from '../battle/question-engine'
 import { loadCardLibrary, loadCampaignConfig, loadCharacterConfig, chooseCampaignEnemies, drawCards, drawLearningCards, makeRuntimeCards } from '../library/card-library'
 import { createAccount, createAccountExport, deleteAccount, importAccountData, loadAccountRegistry, parseAccountExport, saveAccountRegistry, saveSelectedCharacter, switchAccount } from '../accounts/account-manager'
-import { allReviewStats, clearBattleState, clearLearningBattleState, completeLearningDeck, getCardMemorySummary, getLearningMistakes, getReviewMistakes, getTodayLearnedCount, isValidMistakePracticeCount, limitMistakeIds, loadBattleStore, loadCardMemoryStore, loadLearningStore, loadReviewStore, resetDeckLearningMemory, saveBattleState, saveCardMemoryStore, saveLearningStore, saveReviewStore, startLearningSession, updateCardMemory, updateLearningMemory, updateReview } from '../accounts/local-progress'
+import { allReviewStats, clearBattleState, clearLearningBattleState, completeLearningDeck, createReviewSession, getCardMemorySummary, getDueCardIds, getLearningMistakes, getNextDueAt, getReviewMistakes, getTodayLearnedCount, isValidMistakePracticeCount, limitMistakeIds, loadBattleStore, loadCardMemoryStore, loadLearningStore, loadReviewStore, planDeal, recordAnswer, resetDeckLearningMemory, saveBattleState, saveCardMemoryStore, saveLearningStore, saveReviewStore, settleUnshownRequeue, startLearningSession, updateCardMemory, updateLearningMemory, updateReview } from '../accounts/local-progress'
 import { activeCharacterAbilities, advanceCampaignEnemy, applyCardEffect, canCompleteLearningDeck, campaignEnemyProgress, createBattle, drawTurnCards, effectDescription, effectLabel, enemyAttack, finishEnemyTurn, markLearningCardCorrect, MAX_HAND, MAX_SHIELD, protectLearningBattle, returnLearningCardToQueue, TURN_DRAW, useCharacterAbility, WRONG_DAMAGE } from '../battle/battle-rules'
 import { loadAudioManifest, speakWord } from '../battle/pronunciation'
 import { buildStudyDecks, getDeckProgress, getDefaultDeck } from '../library/study-decks'
-import type { AccountRegistry, BattleMode, BattleState, BattleStore, CampaignConfig, CampaignRoute, CardRecord, CharacterConfig, EnemyIcon, LearningStore, QuestionState, ReviewStore, RuntimeCard, StudyDeck } from '../shared/domain-types'
+import type { AccountRegistry, BattleMode, BattleState, BattleStore, CampaignConfig, CampaignRoute, CardMemoryAnswerSource, CardMemoryQuality, CardRecord, CardSource, CharacterConfig, EnemyDefinition, EnemyIcon, LearningStore, QuestionState, ReviewSession, ReviewStore, RuntimeCard, StudyDeck } from '../shared/domain-types'
 import './app-styles.css'
 
 type View = 'menu' | 'modes' | 'learning-decks' | 'campaign-setup' | 'character-select' | 'battle' | 'result' | 'stats' | 'library' | 'mistakes' | 'accounts'
@@ -67,6 +67,10 @@ export default function App() {
   const [campaignStart, setCampaignStart] = useState<CampaignStart | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [reviewSession, setReviewSession] = useState<ReviewSession>(() => createReviewSession())
+  const [cardMeta, setCardMeta] = useState<Record<string, { source: CardSource; quality?: CardMemoryQuality }>>({})
+  const [reviewRunRemaining, setReviewRunRemaining] = useState(0)
+  const [reviewRunStats, setReviewRunStats] = useState({ reviewed: 0, upgraded: 0, downgraded: 0 })
 
   useEffect(() => {
     void loadAudioManifest()
@@ -95,6 +99,7 @@ export default function App() {
 
   useEffect(() => {
     if (!battle) return
+    if (battle.reviewRun) return
     if (battle.status === 'playing' && battle.player.hp > 0 && battle.enemy.hp > 0) {
       saveBattleState(battle.mode, battle)
       setBattleStore((current) => battle.mode === 'learning' && battle.learningDeckId
@@ -209,6 +214,72 @@ export default function App() {
     if (library.length > 0) openCampaignSetup({ mode: 'practice' })
   }
 
+  function resolveCardRecords(ids: string[]): CardRecord[] {
+    const cards: CardRecord[] = []
+    for (const id of ids) {
+      const card = library.find((item) => item.cardId === id)
+      if (!card) console.error(`复习/重现卡 cardId 失配，跳过：${id}`)
+      else cards.push(card)
+    }
+    return cards
+  }
+
+  function dueCardRecords(now = Date.now()): CardRecord[] {
+    return resolveCardRecords(getDueCardIds(cardMemory, now))
+  }
+
+  function dealHand(newPool: CardRecord[], duePool: CardRecord[], fourNewOneOld: boolean, desired: number, now = Date.now()): { cards: CardRecord[]; meta: Array<{ source: CardSource; quality?: CardMemoryQuality }>; nextSession: ReviewSession; deckIds: Set<string> } {
+    const dueIdSet = new Set(duePool.map((card) => card.cardId))
+    const newCandidates = fourNewOneOld ? drawCards(newPool.filter((card) => !dueIdSet.has(card.cardId)), review, desired) : []
+    const { dealt, nextSession } = planDeal(reviewSession, newCandidates.map((card) => card.cardId), duePool.map((card) => card.cardId), desired, { fourNewOneOld })
+    const deckIds = new Set<string>()
+    const cards: CardRecord[] = []
+    const meta: Array<{ source: CardSource; quality?: CardMemoryQuality }> = []
+    for (const item of dealt) {
+      const card = library.find((c) => c.cardId === item.cardId)
+      if (!card) { console.error(`复习/重现卡 cardId 失配，跳过：${item.cardId}`); continue }
+      cards.push(card)
+      meta.push({ source: item.source, quality: cardMemory[item.cardId]?.quality })
+      if (fourNewOneOld ? item.source === 'new' : item.source === 'due') deckIds.add(item.cardId)
+    }
+    return { cards, meta, nextSession, deckIds }
+  }
+
+  const reviewEnemy: EnemyDefinition = { id: 'review-guard', name: 'REVIEW GUARD', subtitle: '到期复习', icon: 'shield', maxHp: 999999, attack: 0, shield: 0, abilities: [] }
+
+  function startReviewRun() {
+    if (library.length === 0) return
+    const dueCards = resolveCardRecords(getDueCardIds(cardMemory)).slice(0, 20)
+    if (dueCards.length === 0) return
+    const openingCount = Math.min(TURN_DRAW, dueCards.length)
+    const opening = dueCards.slice(0, openingCount)
+    const drawPile = dueCards.slice(openingCount)
+    const openingRuntime = makeRuntimeCards(opening)
+    const character = characterConfig?.characters[0]
+    const next = createBattle(drawPile, openingRuntime, 'practice', reviewEnemy, character)
+    next.reviewRun = true
+    clearBattleState('practice')
+    setBattleStore((current) => { const store = { ...current }; delete store.practice; return store })
+    setActiveMode('practice')
+    setReviewSession(createReviewSession())
+    setCardMeta(Object.fromEntries(opening.map((card) => [card.cardId, { source: 'due' as CardSource, quality: cardMemory[card.cardId]?.quality }])))
+    setReviewRunRemaining(dueCards.length)
+    setReviewRunStats({ reviewed: 0, upgraded: 0, downgraded: 0 })
+    setBattle(next)
+    setQuestion(null)
+    setFeedback(null)
+    setView('battle')
+  }
+
+  function settleReviewSession() {
+    setCardMemory((current) => {
+      const settled = settleUnshownRequeue(current, reviewSession, Date.now())
+      if (settled !== current) saveCardMemoryStore(settled)
+      return settled
+    })
+  }
+
+
   function startCampaign(start: CampaignStart, route: CampaignRoute, characterId: string) {
     if (!campaignConfig || !characterConfig || library.length === 0) return
     const configMode = start.mode === 'practice' ? 'practice' : 'learning'
@@ -235,11 +306,29 @@ export default function App() {
     const initialPendingCounts = start.mode === 'learning'
       ? Object.fromEntries(targetIds.map((cardId) => [cardId, Math.max(1, (learningStore.cards[`${start.deckId}|${cardId}`]?.incorrectCount ?? 0) + 1)]))
       : {}
-    const opening = start.mode === 'learning'
-      ? drawLearningCards(targetCards, learningStore, start.deckId as string, initialPendingCounts, {}, Math.min(TURN_DRAW, targetCards.length))
-      : drawCards(targetCards, review, Math.min(TURN_DRAW, targetCards.length))
-    const openingIds = new Set(opening.map((item) => item.cardId))
-    const next = createBattle(targetCards.filter((card) => !openingIds.has(card.cardId)), makeRuntimeCards(opening), start.mode === 'learning' ? 'learning' : 'practice', firstEnemy, character)
+    const desired = Math.min(TURN_DRAW, targetCards.length)
+    let opening: CardRecord[]
+    let openingRuntime: RuntimeCard[]
+    let drawPile: CardRecord[]
+    let openingMeta: Array<{ source: CardSource; quality?: CardMemoryQuality }> = []
+    let nextSession = reviewSession
+    if (start.mode === 'practice') {
+      const result = dealHand(targetCards, dueCardRecords(), true, desired)
+      opening = result.cards
+      openingRuntime = makeRuntimeCards(opening)
+      drawPile = targetCards.filter((card) => !result.deckIds.has(card.cardId))
+      openingMeta = result.meta
+      nextSession = result.nextSession
+    } else if (start.mode === 'learning') {
+      opening = drawLearningCards(targetCards, learningStore, start.deckId as string, initialPendingCounts, {}, desired)
+      openingRuntime = makeRuntimeCards(opening)
+      drawPile = targetCards.filter((card) => !new Set(opening.map((item) => item.cardId)).has(card.cardId))
+    } else {
+      opening = drawCards(targetCards, review, desired)
+      openingRuntime = makeRuntimeCards(opening)
+      drawPile = targetCards.filter((card) => !new Set(opening.map((item) => item.cardId)).has(card.cardId))
+    }
+    const next = createBattle(drawPile, openingRuntime, start.mode === 'learning' ? 'learning' : 'practice', firstEnemy, character)
     next.campaignGoal = start.mode === 'practice' ? 'defeat-all' : 'learn-all'
     next.campaignSetId = chosen.setId
     next.campaignEnemyQueue = chosen.enemies
@@ -272,6 +361,15 @@ export default function App() {
       return nextStore
     })
     setActiveMode(start.mode === 'learning' ? 'learning' : 'practice')
+    if (start.mode === 'practice') {
+      setReviewSession(nextSession)
+      setCardMeta(Object.fromEntries(opening.map((card, index) => [card.cardId, openingMeta[index] ?? { source: 'new' as CardSource }])))
+    } else {
+      setReviewSession(createReviewSession())
+      setCardMeta({})
+    }
+    setReviewRunRemaining(0)
+    setReviewRunStats({ reviewed: 0, upgraded: 0, downgraded: 0 })
     setBattle(next)
     setQuestion(null)
     setFeedback(null)
@@ -314,7 +412,11 @@ export default function App() {
 
   function exitBattle() {
     if (battle) {
-      if (battle.status === 'playing') {
+      settleReviewSession()
+      if (battle.reviewRun) {
+        clearBattleState(activeMode)
+        setBattleStore((current) => { const next = { ...current }; delete next[activeMode]; return next })
+      } else if (battle.status === 'playing') {
         saveBattleState(activeMode, battle)
         setBattleStore((current) => activeMode === 'learning' && battle.learningDeckId
           ? { ...current, learning: { ...(current.learning ?? {}), [battle.learningDeckId]: battle } }
@@ -327,7 +429,7 @@ export default function App() {
     }
     setQuestion(null)
     setFeedback(null)
-    setView(activeMode === 'learning' ? 'learning-decks' : battle?.mistakeSource ? 'mistakes' : 'modes')
+    setView(activeMode === 'learning' ? 'learning-decks' : battle?.reviewRun || battle?.mistakeSource ? 'mistakes' : 'modes')
   }
 
   function deleteSavedBattle(mode: BattleMode) {
@@ -360,6 +462,7 @@ export default function App() {
   function completeAnswer(correct: boolean, abandoned = false) {
     if (!battle || !question || feedback) return
     const card = question.card
+    const source: CardMemoryAnswerSource = cardMeta[card.card.cardId]?.source === 'requeue' ? 'requeue' : 'due'
     let next = structuredClone(battle) as BattleState
     next.totalAnswers += 1
     next.usedCards += 1
@@ -421,14 +524,32 @@ export default function App() {
       }
     }
     const now = Date.now()
-    const nextCardMemory = updateCardMemory(cardMemory, card.card.cardId, card.face, correct, now, abandoned)
+    const beforeRecord = cardMemory[card.card.cardId]
+    const nextCardMemory = updateCardMemory(cardMemory, card.card.cardId, card.face, correct, now, { abandoned, source })
     if (nextCardMemory !== cardMemory) {
       setCardMemory(nextCardMemory)
       saveCardMemoryStore(nextCardMemory)
     }
+    const isReviewPractice = Boolean(next.reviewRun || (activeMode === 'practice' && !next.mistakeSource && !next.learningDeckId))
+    if (next.reviewRun && source === 'due') {
+      const order: CardMemoryQuality[] = ['bronze', 'silver', 'gold', 'mastered']
+      const beforeQuality = beforeRecord?.quality
+      const afterQuality = nextCardMemory[card.card.cardId]?.quality
+      let upgraded = 0
+      let downgraded = 0
+      if (beforeQuality && afterQuality && beforeQuality !== afterQuality) {
+        if (order.indexOf(afterQuality) > order.indexOf(beforeQuality)) upgraded = 1
+        else downgraded = 1
+      }
+      const remaining = reviewRunRemaining - 1
+      setReviewRunRemaining(remaining)
+      setReviewRunStats((stats) => ({ reviewed: stats.reviewed + 1, upgraded: stats.upgraded + upgraded, downgraded: stats.downgraded + downgraded }))
+      if (remaining <= 0) next.status = 'victory'
+    }
+    if (isReviewPractice) setReviewSession((session) => recordAnswer(session, card.card.cardId, correct))
     setBattle(next)
     setFeedback(correct
-      ? { correct: true, text: isPass ? '过牌答对，本题只计入复习记录，卡牌效果不生效。' : `${effectLabel(card.card.effectType)}牌生效：${effectDescription(card)}` }
+      ? { correct: true, text: source === 'requeue' ? '这次记住了，今晚再见。' : isPass ? '过牌答对，本题只计入复习记录，卡牌效果不生效。' : `${effectLabel(card.card.effectType)}牌生效：${effectDescription(card)}` }
       : { correct: false, abandoned, text: `${abandoned ? '已跳过本题。' : '回答错误。'} 正确答案：${card.card.word}。你受到 ${WRONG_DAMAGE} 点直接伤害。` })
   }
 
@@ -461,7 +582,10 @@ export default function App() {
     setQuestion(null)
     setAnswer('')
     setSelectedOption(null)
-    if (next.status !== 'playing') setView('result')
+    if (next.status !== 'playing') {
+      setView('result')
+      settleReviewSession()
+    }
     if (next.status !== 'playing') activeMode === 'learning' && next.learningDeckId ? clearLearningBattleState(next.learningDeckId) : clearBattleState(activeMode)
   }
 
@@ -470,18 +594,47 @@ export default function App() {
     const next = finishEnemyTurn(battle)
     if (next.status !== 'playing') {
       setBattle(next)
+      settleReviewSession()
       activeMode === 'learning' && next.learningDeckId ? clearLearningBattleState(next.learningDeckId) : clearBattleState(activeMode)
       setView('result')
       return
     }
-    const moreCards = activeMode === 'learning' && next.learningDeckId
-      ? drawLearningCards(next.drawPile, learningStore, next.learningDeckId, next.learningPendingCounts ?? {}, next.learningLastIncorrectAt ?? {}, TURN_DRAW)
-      : drawCards(next.drawPile, review, TURN_DRAW)
-    const moreIds = new Set(moreCards.map((item) => item.cardId))
+    let moreCards: CardRecord[]
+    let drawnMeta: Array<{ source: CardSource; quality?: CardMemoryQuality }> = []
+    let nextSession = reviewSession
+    let moreIds: Set<string>
+    if (next.reviewRun) {
+      const result = dealHand([], next.drawPile, false, TURN_DRAW)
+      moreCards = result.cards
+      drawnMeta = result.meta
+      nextSession = result.nextSession
+      moreIds = result.deckIds
+    } else if (activeMode === 'practice' && !next.mistakeSource) {
+      const result = dealHand(next.drawPile, dueCardRecords(), true, TURN_DRAW)
+      moreCards = result.cards
+      drawnMeta = result.meta
+      nextSession = result.nextSession
+      moreIds = result.deckIds
+    } else if (activeMode === 'learning' && next.learningDeckId) {
+      moreCards = drawLearningCards(next.drawPile, learningStore, next.learningDeckId, next.learningPendingCounts ?? {}, next.learningLastIncorrectAt ?? {}, TURN_DRAW)
+      moreIds = new Set(moreCards.map((item) => item.cardId))
+    } else {
+      moreCards = drawCards(next.drawPile, review, TURN_DRAW)
+      moreIds = new Set(moreCards.map((item) => item.cardId))
+    }
     next.drawPile = next.drawPile.filter((card) => !moreIds.has(card.cardId))
     const drawn = drawTurnCards(next, moreCards)
+    if (next.reviewRun || (activeMode === 'practice' && !next.mistakeSource)) {
+      setReviewSession(nextSession)
+      setCardMeta((current) => {
+        const meta: Record<string, { source: CardSource; quality?: CardMemoryQuality }> = { ...current }
+        moreCards.forEach((card, index) => { meta[card.cardId] = drawnMeta[index] ?? { source: 'new' as CardSource } })
+        return meta
+      })
+    }
     setBattle(drawn.state)
     if (drawn.state.status !== 'playing') {
+      settleReviewSession()
       activeMode === 'learning' && drawn.state.learningDeckId ? clearLearningBattleState(drawn.state.learningDeckId) : clearBattleState(activeMode)
       setView('result')
     }
@@ -529,9 +682,9 @@ export default function App() {
     {view === 'character-select' && campaignStart && characterConfig && <CharacterSelect characterConfig={characterConfig} selectedCharacterId={campaignStart.characterId ?? accountRegistry.accounts[accountRegistry.activeUsername]?.selectedCharacterId ?? characterConfig.selectedCharacterId} onSelect={(characterId) => { setCampaignStart({ ...campaignStart, characterId }); setAccountRegistry((current) => saveSelectedCharacter(current, characterId)); setView('campaign-setup') }} onBack={() => setView('campaign-setup')} />}
     {view === 'stats' && <Stats review={review} learning={learningStore} library={library} stats={stats} onReset={resetProgress} onMistakes={() => openMistakes('all')} onBack={() => setView('menu')} />}
     {view === 'library' && <LibraryPage library={library} review={review} onBack={() => setView('menu')} />}
-    {view === 'mistakes' && <MistakeBook review={review} learning={learningStore} cardMemory={cardMemory} library={library} initialPage={mistakeBookPage} onPractice={(maxCount) => startMistakePractice('practice', maxCount)} onLearning={(maxCount) => startMistakePractice('learning', maxCount)} onAll={(maxCount) => startMistakePractice('all', maxCount)} onBack={() => setView('menu')} />}
-    {view === 'battle' && battle && <BattleScreen battle={battle} question={question} answer={answer} setAnswer={setAnswer} selectedOption={selectedOption} setSelectedOption={setSelectedOption} onCard={beginQuestion} onSubmit={submitAnswer} onAbandon={abandonSpelling} feedback={feedback} onCloseFeedback={closeFeedback} onEndTurn={endTurn} onExitBattle={exitBattle} onAbility={(abilityId) => { const result = useCharacterAbility(battle, abilityId); if (!result) return; setBattle(result.state); setFeedback({ correct: true, text: result.summary }) }} />}
-    {view === 'result' && battle && <Result battle={battle} library={library} onAgain={() => battle.mode === 'learning' ? openLearningDecks() : battle.mistakeSource ? openMistakes() : openModeSelect()} onHome={() => setView('menu')} onStats={() => setView('stats')} />}
+    {view === 'mistakes' && <MistakeBook review={review} learning={learningStore} cardMemory={cardMemory} library={library} initialPage={mistakeBookPage} onReview={startReviewRun} onPractice={(maxCount) => startMistakePractice('practice', maxCount)} onLearning={(maxCount) => startMistakePractice('learning', maxCount)} onAll={(maxCount) => startMistakePractice('all', maxCount)} onBack={() => setView('menu')} />}
+    {view === 'battle' && battle && <BattleScreen battle={battle} question={question} answer={answer} setAnswer={setAnswer} selectedOption={selectedOption} setSelectedOption={setSelectedOption} cardMeta={cardMeta} onCard={beginQuestion} onSubmit={submitAnswer} onAbandon={abandonSpelling} feedback={feedback} onCloseFeedback={closeFeedback} onEndTurn={endTurn} onExitBattle={exitBattle} onAbility={(abilityId) => { const result = useCharacterAbility(battle, abilityId); if (!result) return; setBattle(result.state); setFeedback({ correct: true, text: result.summary }) }} />}
+    {view === 'result' && battle && <Result battle={battle} library={library} reviewRunStats={reviewRunStats} onAgain={() => battle.mode === 'learning' ? openLearningDecks() : battle.reviewRun || battle.mistakeSource ? openMistakes() : openModeSelect()} onHome={() => setView('menu')} onStats={() => setView('stats')} />}
     {view === 'accounts' && <AccountsPage registry={accountRegistry} onCreate={createUserAccount} onSwitch={switchUserAccount} onDelete={removeUserAccount} onExport={exportUserAccount} onImport={importUserAccount} onBack={() => setView('menu')} />}
   </main>
 }
@@ -558,7 +711,7 @@ function CharacterSelect({ characterConfig, selectedCharacterId, onSelect, onBac
   const preview = characterConfig.characters.find((character) => character.id === previewId) ?? characters[0]
   return <section className="character-select-page"><button className="back-link" onClick={onBack}>← 返回路线选择</button><div className="eyebrow"><span className="eyebrow-dot" /> PLAYER CHARACTERS</div><h1>选择己方角色</h1><p className="mode-lead">先查看角色能力，再确认本次战斗使用的角色。</p><label className="character-search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索角色名称或别名" aria-label="搜索角色" /></label>{preview && <div className="character-preview"><div className="character-preview-head"><span className="character-preview-portrait"><Portrait key={preview.avatar} avatar={preview.avatar} icon={preview.icon} size={48} /></span><div><span className="section-label">SELECTED CHARACTER</span><h2>{preview.name}</h2><p>{preview.subtitle} · {preview.maxHp} 最大生命 · {Math.min(MAX_SHIELD, preview.shield ?? 0)} 初始护盾</p></div></div><div className="character-preview-abilities">{preview.abilities.length > 0 ? preview.abilities.map((ability) => <div className="character-preview-ability" key={ability.id}><span className="character-ability-kind">{ability.kind === 'passive' ? '被动' : '主动'}</span><span><strong>{ability.description}</strong><small>{ability.kind === 'active' ? '主动技能不消耗行动力' : '进入战斗后自动生效'}</small></span></div>) : <span className="character-no-abilities">暂无特殊能力</span>}</div><button type="button" className="button primary character-confirm" onClick={() => onSelect(preview.id)}><Check size={16} />确认使用 {preview.name}<ChevronRight size={16} /></button></div>}<div className="character-select-grid">{characters.map((character) => <button type="button" key={character.id} className={`character-select-option ${character.id === preview?.id ? 'active' : ''}`} onClick={() => setPreviewId(character.id)}><span className="character-select-icon"><Portrait key={character.avatar} avatar={character.avatar} icon={character.icon} size={30} /></span><span><strong>{character.name}</strong><small>{character.alias ? `${character.alias} · ` : ''}{character.subtitle}</small><em>{character.maxHp} 最大生命 · {Math.min(MAX_SHIELD, character.shield ?? 0)} 初始护盾</em></span><ChevronRight size={17} /></button>)}</div>{characters.length === 0 && <div className="stats-empty"><Search size={18} />没有找到符合条件的角色。</div>}</section>
 }
-function MistakeBook({ review, learning, cardMemory, library, initialPage, onPractice, onLearning, onAll, onBack }: { review: ReviewStore; learning: LearningStore; cardMemory: ReturnType<typeof loadCardMemoryStore>; library: CardRecord[]; initialPage: MistakeBookPage; onPractice: (maxCount?: number) => void; onLearning: (maxCount?: number) => void; onAll: (maxCount?: number) => void; onBack: () => void }) {
+function MistakeBook({ review, learning, cardMemory, library, initialPage, onReview, onPractice, onLearning, onAll, onBack }: { review: ReviewStore; learning: LearningStore; cardMemory: ReturnType<typeof loadCardMemoryStore>; library: CardRecord[]; initialPage: MistakeBookPage; onReview: () => void; onPractice: (maxCount?: number) => void; onLearning: (maxCount?: number) => void; onAll: (maxCount?: number) => void; onBack: () => void }) {
   const [page, setPage] = useState<MistakeBookPage>(initialPage)
   const [maxCount, setMaxCount] = useState('')
   const practice = getReviewMistakes(review)
@@ -572,10 +725,11 @@ function MistakeBook({ review, learning, cardMemory, library, initialPage, onPra
   const validLearning = isValidMistakePracticeCount(studyIds.size, requestedCount)
   const validAll = isValidMistakePracticeCount(allCount, requestedCount)
   const memorySummary = getCardMemorySummary(cardMemory)
+  const nextDueAt = getNextDueAt(cardMemory)
   const cardFor = (id: string) => library.find((card) => card.cardId === id)
   const renderWords = (ids: string[]) => <div className="mistake-book-list">{ids.map((id) => { const card = cardFor(id); return card ? <div className="mistake-book-row" key={id}><strong>{card.word}</strong><span>{card.pos}</span><em>{card.meaning}</em><button className="speech-button mistake-speech-button" aria-label={`播放 ${card.word} 的发音`} onClick={() => speakWord(card.word, card.pos)}><Volume2 size={15} /></button></div> : null })}</div>
-  const renderMemoryRecords = () => <div className="memory-record-list">{Object.values(cardMemory).map((record) => { const card = cardFor(record.cardId); return <article className={`memory-record quality-${record.quality}`} key={record.cardId}><div className="memory-record-main"><div><strong>{card?.word ?? record.cardId}</strong><span className={`quality-badge quality-${record.quality}`}>{({ bronze: '青铜', silver: '白银', gold: '黄金', mastered: '已掌握' } as const)[record.quality]}</span><small>{card ? `${card.pos} · ${card.meaning}` : '词库中暂无此卡片'}</small></div>{card && <button className="speech-button mistake-speech-button" aria-label={`播放 ${card.word} 的发音`} onClick={() => speakWord(card.word, card.pos)}><Volume2 size={15} /></button>}</div><div className="memory-record-meta"><span>连对 {record.streak}</span><span>错误 {record.lapses}</span><span className={record.dueAt <= Date.now() ? 'is-due' : ''}>{record.dueAt <= Date.now() ? '已到期' : `下次：${new Date(record.dueAt).toLocaleDateString()}`}</span></div></article> })}{Object.keys(cardMemory).length === 0 && <div className="stats-empty"><Check size={18} />还没有卡片记忆档案。答错或放弃后会自动建立记录。</div>}</div>
-  return <section className="mistake-book-page"><button className="back-link" onClick={onBack}>← 返回首页</button><div className="mistake-book-heading"><div><div className="eyebrow"><span className="eyebrow-dot" /> MISTAKE BOOK</div><h1>错题本</h1><p>把答错的词重新带回战场，连续答对三次后自动移除。</p></div><div className="mistake-book-total"><strong>{allCount}</strong><span>个待复习词</span></div></div><div className="mistake-book-tabs"><button className={page === 'choose' ? 'active' : ''} onClick={() => setPage('choose')}>选择练习</button><button className={page === 'all' ? 'active' : ''} onClick={() => setPage('all')}>查看所有错题</button><button className="active" onClick={() => setPage('all')}>记忆档案 {memorySummary.total}</button></div>{page === 'choose' ? <><div className="mistake-limit-control"><label htmlFor="mistake-limit">本次最多练习</label><input id="mistake-limit" type="number" min="10" step="1" inputMode="numeric" value={maxCount} onChange={(event) => setMaxCount(event.target.value)} placeholder="全部" /><span>个错词，最少 10 个</span></div>{requestedCount !== undefined && !Number.isInteger(requestedCount) || requestedCount !== undefined && requestedCount < 10 ? <p className="mistake-limit-error">请输入不小于 10 的整数。</p> : null}<div className="mistake-choice-grid"><article><div className="choice-icon"><Crosshair size={22} /></div><strong>练习模式错题</strong><p>{practiceIds.size} 个词 · 使用练习战斗规则</p><button className="button primary" disabled={!validPractice} onClick={() => onPractice(practiceLimit)}><Swords size={15} />开始练习</button></article><article><div className="choice-icon"><BookOpen size={22} /></div><strong>学习模式错题</strong><p>{studyIds.size} 个词 · 按学习记录追踪</p><button className="button primary" disabled={!validLearning} onClick={() => onLearning(practiceLimit)}><BookOpen size={15} />开始学习错题</button></article><article><div className="choice-icon"><Target size={22} /></div><strong>全部错题</strong><p>{allCount} 个词 · 合并两类错题</p><button className="button ghost" disabled={!validAll} onClick={() => onAll(practiceLimit)}><RotateCcw size={15} />混合练习</button></article></div></> : <><div className="memory-summary"><span>总档案 <strong>{memorySummary.total}</strong></span><span>已到期 <strong>{memorySummary.due}</strong></span><span>累计错误 <strong>{memorySummary.lapses}</strong></span></div>{renderMemoryRecords()}</>}</section>
+  const renderMemoryRecords = () => <div className="memory-record-list">{Object.values(cardMemory).map((record) => { const card = cardFor(record.cardId); return <article className={`memory-record quality-${record.quality}`} key={record.cardId}><div className="memory-record-main"><div><strong>{card?.word ?? record.cardId}</strong><span className={`quality-badge quality-${record.quality}`}>{({ bronze: '青铜', silver: '白银', gold: '黄金', mastered: '已掌握' } as const)[record.quality]}</span><small>{card ? `${card.pos} · ${card.meaning}` : '词库中暂无此卡片'}</small></div>{card && <button className="speech-button mistake-speech-button" aria-label={`播放 ${card.word} 的发音`} onClick={() => speakWord(card.word, card.pos)}><Volume2 size={15} /></button>}</div><div className="memory-record-meta"><span>连对 {record.streak}</span><span>错误 {record.lapses}</span><span className={record.dueAt <= Date.now() ? 'is-due' : ''}>{record.dueAt <= Date.now() ? '已到期' : `下次：${new Date(record.dueAt).toLocaleDateString()}`}</span></div></article> })}{Object.keys(cardMemory).length === 0 && <div className="stats-empty"><Check size={18} />暂无复习卡片，答错的单词会出现在这里。</div>}</div>
+  return <section className="mistake-book-page"><button className="back-link" onClick={onBack}>← 返回首页</button><div className="mistake-book-heading"><div><div className="eyebrow"><span className="eyebrow-dot" /> MISTAKE BOOK</div><h1>错题本</h1><p>把答错的词重新带回战场，连续答对三次后自动移除。</p></div><div className="mistake-book-review"><button className="button primary" disabled={memorySummary.due === 0} onClick={onReview}><RotateCcw size={15} />开始复习（{memorySummary.due}）</button><small>本局取最早到期的 20 张</small></div><div className="mistake-book-total"><strong>{allCount}</strong><span>个待复习词</span></div></div><div className="mistake-book-tabs"><button className={page === 'choose' ? 'active' : ''} onClick={() => setPage('choose')}>选择练习</button><button className={page === 'all' ? 'active' : ''} onClick={() => setPage('all')}>查看所有错题</button><button className="active" onClick={() => setPage('all')}>记忆档案 {memorySummary.total}</button></div>{page === 'choose' ? <><div className="mistake-limit-control"><label htmlFor="mistake-limit">本次最多练习</label><input id="mistake-limit" type="number" min="10" step="1" inputMode="numeric" value={maxCount} onChange={(event) => setMaxCount(event.target.value)} placeholder="全部" /><span>个错词，最少 10 个</span></div>{requestedCount !== undefined && !Number.isInteger(requestedCount) || requestedCount !== undefined && requestedCount < 10 ? <p className="mistake-limit-error">请输入不小于 10 的整数。</p> : null}<div className="mistake-choice-grid"><article><div className="choice-icon"><Crosshair size={22} /></div><strong>练习模式错题</strong><p>{practiceIds.size} 个词 · 使用练习战斗规则</p><button className="button primary" disabled={!validPractice} onClick={() => onPractice(practiceLimit)}><Swords size={15} />开始练习</button></article><article><div className="choice-icon"><BookOpen size={22} /></div><strong>学习模式错题</strong><p>{studyIds.size} 个词 · 按学习记录追踪</p><button className="button primary" disabled={!validLearning} onClick={() => onLearning(practiceLimit)}><BookOpen size={15} />开始学习错题</button></article><article><div className="choice-icon"><Target size={22} /></div><strong>全部错题</strong><p>{allCount} 个词 · 合并两类错题</p><button className="button ghost" disabled={!validAll} onClick={() => onAll(practiceLimit)}><RotateCcw size={15} />混合练习</button></article></div></> : <><div className="memory-summary"><span>总档案 <strong>{memorySummary.total}</strong></span><span>已到期 <strong>{memorySummary.due}</strong></span><span>累计错误 <strong>{memorySummary.lapses}</strong></span></div>{memorySummary.total > 0 && memorySummary.due === 0 && <p className="review-next-due">下次到期：{nextDueAt ? new Date(nextDueAt).toLocaleString() : '—'}</p>}{renderMemoryRecords()}</>}</section>
 }
 
 function ModeSelect({ battleStore, onLearning, onPractice, onContinue, onDelete, onBack }: { battleStore: BattleStore; onLearning: () => void; onPractice: () => void; onContinue: (mode: BattleMode) => void; onDelete: (mode: BattleMode) => void; onBack: () => void }) {
@@ -591,18 +745,20 @@ function LearningDecks({ decks, learning, battleStore, onStart, onContinue, onDe
   return <section className="deck-page"><button className="back-link" onClick={onBack}>← 返回模式选择</button><div className="deck-heading"><div><div className="eyebrow"><span className="eyebrow-dot" /> STUDY DECKS</div><h1>选择学习卡组</h1><p>答对卡片才会记入本组进度，已完成的卡组也可以再次学习。</p></div><div className="today-study"><strong>{today}</strong><span>今天学了多少张卡</span></div></div><nav className="deck-directory" aria-label="学习卡组目录">{groups.map(([label, items]) => { const id = items[0]?.category === 'standard' ? sectionIds.standard : items[0]?.category === 'low-frequency' ? sectionIds.low : sectionIds.topic; return <button key={id} onClick={() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>{label}<small>{items.length}</small></button> })}</nav>{defaultDeck && <div className="recommended-deck"><div><span className="section-label">建议下一组</span><strong>{defaultDeck.title}</strong><small>{getDeckProgress(defaultDeck, learning).mastered} / {defaultDeck.totalCards} 张已掌握</small></div><button className="button primary" onClick={() => onStart(defaultDeck)}><BookOpen size={16} />{learning.decks[defaultDeck.deckId] ? '继续学习' : '开始学习'}</button></div>}{groups.map(([label, items]) => { const id = items[0]?.category === 'standard' ? sectionIds.standard : items[0]?.category === 'low-frequency' ? sectionIds.low : sectionIds.topic; return <div className="deck-section" id={id} key={label}><div className="deck-section-heading"><span className="section-label">{label}</span><small>{items.length} 组</small></div><div className="deck-grid">{items.map((deck) => { const progress = getDeckProgress(deck, learning); const saved = Boolean(battleStore.learning?.[deck.deckId]?.status === 'playing'); const hasProgress = Boolean(learning.decks[deck.deckId]); return <article className="deck-card" key={deck.deckId}><div className="deck-card-top"><span className="level-dot level-3">{deck.totalCards}</span><span>{deck.category === 'topic' ? '主题' : '30张一组'}</span></div><h2>{deck.title}</h2><p>{deck.description}</p><div className="deck-progress-line"><span>{progress.mastered} / {progress.total} 已掌握</span><strong>{progress.percent}%</strong></div><ProgressBar value={progress.mastered} max={progress.total} tone="green" /><div className="subgroup-progress">{deck.subgroups.map((part) => { const mastered = part.cardIds.filter((id) => learning.decks[deck.deckId]?.masteredCardIds.includes(id)).length; return <span key={part.subgroupId} title={`${part.title} ${mastered}/${part.cardIds.length}`} className={mastered === part.cardIds.length ? 'done' : ''}>{mastered}</span> })}</div><div className="deck-actions">{(saved || hasProgress) ? <button className="button primary" onClick={() => onContinue(deck.deckId)}>{saved ? <RotateCcw size={14} /> : <BookOpen size={14} />}继续学习</button> : <button className="button primary" onClick={() => onStart(deck)}><BookOpen size={14} />开始学习</button>}{progress.mastered === progress.total && !saved && <button className="icon-text-button" onClick={() => onStart(deck)}><RotateCcw size={14} />再次学习</button>}<button className="icon-text-button" onClick={() => onReset(deck.deckId)}><Trash2 size={14} />清除记忆</button>{saved && <button className="icon-text-button danger-text" onClick={() => onDeleteBattle(deck.deckId)}><X size={14} />删除残局</button>}</div></article> })}</div></div> })}</section>
 }
 
-function BattleScreen({ battle, question, answer, setAnswer, selectedOption, setSelectedOption, onCard, onSubmit, onAbandon, feedback, onCloseFeedback, onEndTurn, onExitBattle, onAbility }: { battle: BattleState; question: QuestionState | null; answer: string; setAnswer: (value: string) => void; selectedOption: string | null; setSelectedOption: (value: string | null) => void; onCard: (card: RuntimeCard) => void; onSubmit: () => void; onAbandon: () => void; feedback: { correct: boolean; text: string; abandoned?: boolean } | null; onCloseFeedback: () => void; onEndTurn: () => void; onExitBattle: () => void; onAbility: (abilityId: string) => void }) {
+function BattleScreen({ battle, question, answer, setAnswer, selectedOption, setSelectedOption, cardMeta, onCard, onSubmit, onAbandon, feedback, onCloseFeedback, onEndTurn, onExitBattle, onAbility }: { battle: BattleState; question: QuestionState | null; answer: string; setAnswer: (value: string) => void; selectedOption: string | null; setSelectedOption: (value: string | null) => void; cardMeta: Record<string, { source: CardSource; quality?: CardMemoryQuality }>; onCard: (card: RuntimeCard) => void; onSubmit: () => void; onAbandon: () => void; feedback: { correct: boolean; text: string; abandoned?: boolean } | null; onCloseFeedback: () => void; onEndTurn: () => void; onExitBattle: () => void; onAbility: (abilityId: string) => void }) {
   const progress = campaignEnemyProgress(battle)
   const passiveAbilities = battle.character.abilities.filter((ability) => ability.kind === 'passive')
   const activeAbilities = activeCharacterAbilities(battle)
-  return <section className="battle-page"><div className="battle-head"><div><div className="eyebrow"><span className="eyebrow-dot" /> CONTINUOUS CAMPAIGN</div><h1>{battle.enemy.subtitle} · 连续战役</h1>{progress && <div className="campaign-progress">敌人 {progress.current} / {progress.total}</div>}</div><div className="battle-actions"><div className="turn-display"><small>回合</small><strong>{String(battle.turn).padStart(2, '0')}</strong></div><button className="button end-turn" disabled={Boolean(question || feedback)} onClick={onEndTurn}>{battle.player.energy > 0 ? '结束回合' : '结束过牌'}<ChevronRight size={17} /></button><button className="button exit-battle" onClick={onExitBattle}><LogOut size={16} />退出战斗</button></div></div><div className="arena"><div className="enemy-side"><div className="enemy-label"><span className="status-dot danger" /> HOSTILE ENTITY <span>{progress ? String(progress.current).padStart(2, '0') : '01'}</span></div><div className="enemy-portrait"><div className="enemy-core"><Portrait key={battle.enemy.avatar} avatar={battle.enemy.avatar} icon={battle.enemy.icon} size={50} /></div><div className="enemy-ring ring-a" /><div className="enemy-ring ring-b" /></div><div className="enemy-name">{battle.enemy.name}</div><div className="enemy-subtitle">{battle.enemy.subtitle}</div><div className="stat-row"><span><Heart size={15} />生命</span><strong>{battle.enemy.hp} / {battle.enemy.maxHp}</strong></div><ProgressBar value={battle.enemy.hp} max={battle.enemy.maxHp} tone="red" /><div className="stat-row"><span><Shield size={15} />护盾</span><strong>{battle.enemy.shield}</strong></div><ProgressBar value={battle.enemy.shield} max={MAX_SHIELD} tone="blue" /><div className="enemy-panel"><div className="enemy-panel-title"><span>敌方能力</span><small>自动生效</small></div><div className="enemy-abilities">{battle.enemy.abilities.length > 0 ? battle.enemy.abilities.map((ability, index) => <span key={`${ability.type}-${index}`}><Zap size={13} />{ability.description}</span>) : <span><CircleHelp size={13} />暂无特殊能力</span>}</div></div><div className="enemy-intent"><Crosshair size={15} /><span>下回合攻击</span><strong>{enemyAttack(battle)} <small>DAMAGE</small></strong></div></div><div className="arena-divider"><span>VS</span></div><div className="player-side"><div className="player-label"><span>PLAYER</span><span className="status-dot safe" /> YOU</div><div className="player-portrait"><div className="player-seal"><Portrait key={battle.character.avatar} avatar={battle.character.avatar} icon={battle.character.icon} size={32} /></div></div><div className="player-name">{battle.character.name}</div><div className="player-subtitle">{battle.character.subtitle}</div><div className="stat-row"><span><Heart size={15} />生命</span><strong>{battle.player.hp} <small>/ {battle.player.maxHp}</small></strong></div><ProgressBar value={battle.player.hp} max={battle.player.maxHp} tone="green" /><div className="stat-row"><span><Shield size={15} />护盾</span><strong>{battle.player.shield}</strong></div><ProgressBar value={battle.player.shield} max={MAX_SHIELD} tone="blue" /><div className="character-panel"><div className="character-panel-title"><span>角色能力</span><small>主动技能不消耗行动力</small></div>{passiveAbilities.length > 0 && <div className="character-abilities passive-abilities">{passiveAbilities.map((ability) => <span key={ability.id}><Sparkles size={13} />{ability.description}</span>)}</div>}{activeAbilities.length > 0 && <div className="character-abilities active-abilities">{activeAbilities.map((ability) => { const cooldown = battle.character.cooldowns[ability.id] ?? 0; const available = cooldown === 0 && !question && !feedback; return <button className="character-ability" key={ability.id} disabled={!available} onClick={() => onAbility(ability.id)}><span><Zap size={14} /><strong>{ability.description}</strong></span><small>{cooldown > 0 ? `冷却 ${cooldown} 回合` : '可用 · 不消耗行动力'}</small></button> })}</div>}{passiveAbilities.length === 0 && activeAbilities.length === 0 && <span className="character-no-abilities">暂无特殊能力</span>}</div></div></div><div className="battle-bottom"><div className="hand-heading"><div><span className="eyebrow"><span className="eyebrow-dot" /> YOUR HAND</span><strong>{battle.hand.length} / {MAX_HAND}</strong></div><div className={`energy ${battle.player.energy === 0 ? 'is-pass' : ''}`}><Zap size={17} fill="currentColor" /><strong>{battle.player.energy}</strong><span>{battle.player.energy > 0 ? '/ 3 ACTION' : '过牌阶段'}</span></div></div><div className="hand">{battle.hand.length === 0 ? <div className="empty-hand">手牌已打空。点击上方“结束回合”抽取新牌。</div> : battle.hand.map((card) => <CardView key={card.instanceId} card={card} disabled={Boolean(question || feedback)} showSpeech={!question || question.type === 'meaning'} onClick={() => onCard(card)} />)}</div><div className="battle-footer"><div className="battle-log">{battle.log[0]}</div></div></div>{question && !feedback && <QuestionModal question={question} answer={answer} setAnswer={setAnswer} selectedOption={selectedOption} setSelectedOption={setSelectedOption} onSubmit={onSubmit} onAbandon={onAbandon} />}{feedback && <FeedbackModal feedback={feedback} question={question} onClose={onCloseFeedback} />}</section>
+  return <section className="battle-page"><div className="battle-head"><div><div className="eyebrow"><span className="eyebrow-dot" /> CONTINUOUS CAMPAIGN</div><h1>{battle.enemy.subtitle} · 连续战役</h1>{progress && <div className="campaign-progress">敌人 {progress.current} / {progress.total}</div>}</div><div className="battle-actions"><div className="turn-display"><small>回合</small><strong>{String(battle.turn).padStart(2, '0')}</strong></div><button className="button end-turn" disabled={Boolean(question || feedback)} onClick={onEndTurn}>{battle.player.energy > 0 ? '结束回合' : '结束过牌'}<ChevronRight size={17} /></button><button className="button exit-battle" onClick={onExitBattle}><LogOut size={16} />退出战斗</button></div></div><div className="arena"><div className="enemy-side"><div className="enemy-label"><span className="status-dot danger" /> HOSTILE ENTITY <span>{progress ? String(progress.current).padStart(2, '0') : '01'}</span></div><div className="enemy-portrait"><div className="enemy-core"><Portrait key={battle.enemy.avatar} avatar={battle.enemy.avatar} icon={battle.enemy.icon} size={50} /></div><div className="enemy-ring ring-a" /><div className="enemy-ring ring-b" /></div><div className="enemy-name">{battle.enemy.name}</div><div className="enemy-subtitle">{battle.enemy.subtitle}</div><div className="stat-row"><span><Heart size={15} />生命</span><strong>{battle.enemy.hp} / {battle.enemy.maxHp}</strong></div><ProgressBar value={battle.enemy.hp} max={battle.enemy.maxHp} tone="red" /><div className="stat-row"><span><Shield size={15} />护盾</span><strong>{battle.enemy.shield}</strong></div><ProgressBar value={battle.enemy.shield} max={MAX_SHIELD} tone="blue" /><div className="enemy-panel"><div className="enemy-panel-title"><span>敌方能力</span><small>自动生效</small></div><div className="enemy-abilities">{battle.enemy.abilities.length > 0 ? battle.enemy.abilities.map((ability, index) => <span key={`${ability.type}-${index}`}><Zap size={13} />{ability.description}</span>) : <span><CircleHelp size={13} />暂无特殊能力</span>}</div></div><div className="enemy-intent"><Crosshair size={15} /><span>下回合攻击</span><strong>{enemyAttack(battle)} <small>DAMAGE</small></strong></div></div><div className="arena-divider"><span>VS</span></div><div className="player-side"><div className="player-label"><span>PLAYER</span><span className="status-dot safe" /> YOU</div><div className="player-portrait"><div className="player-seal"><Portrait key={battle.character.avatar} avatar={battle.character.avatar} icon={battle.character.icon} size={32} /></div></div><div className="player-name">{battle.character.name}</div><div className="player-subtitle">{battle.character.subtitle}</div><div className="stat-row"><span><Heart size={15} />生命</span><strong>{battle.player.hp} <small>/ {battle.player.maxHp}</small></strong></div><ProgressBar value={battle.player.hp} max={battle.player.maxHp} tone="green" /><div className="stat-row"><span><Shield size={15} />护盾</span><strong>{battle.player.shield}</strong></div><ProgressBar value={battle.player.shield} max={MAX_SHIELD} tone="blue" /><div className="character-panel"><div className="character-panel-title"><span>角色能力</span><small>主动技能不消耗行动力</small></div>{passiveAbilities.length > 0 && <div className="character-abilities passive-abilities">{passiveAbilities.map((ability) => <span key={ability.id}><Sparkles size={13} />{ability.description}</span>)}</div>}{activeAbilities.length > 0 && <div className="character-abilities active-abilities">{activeAbilities.map((ability) => { const cooldown = battle.character.cooldowns[ability.id] ?? 0; const available = cooldown === 0 && !question && !feedback; return <button className="character-ability" key={ability.id} disabled={!available} onClick={() => onAbility(ability.id)}><span><Zap size={14} /><strong>{ability.description}</strong></span><small>{cooldown > 0 ? `冷却 ${cooldown} 回合` : '可用 · 不消耗行动力'}</small></button> })}</div>}{passiveAbilities.length === 0 && activeAbilities.length === 0 && <span className="character-no-abilities">暂无特殊能力</span>}</div></div></div><div className="battle-bottom"><div className="hand-heading"><div><span className="eyebrow"><span className="eyebrow-dot" /> YOUR HAND</span><strong>{battle.hand.length} / {MAX_HAND}</strong></div><div className={`energy ${battle.player.energy === 0 ? 'is-pass' : ''}`}><Zap size={17} fill="currentColor" /><strong>{battle.player.energy}</strong><span>{battle.player.energy > 0 ? '/ 3 ACTION' : '过牌阶段'}</span></div></div><div className="hand">{battle.hand.length === 0 ? <div className="empty-hand">手牌已打空。点击上方“结束回合”抽取新牌。</div> : battle.hand.map((card) => <CardView key={card.instanceId} card={card} source={cardMeta[card.card.cardId]?.source} quality={cardMeta[card.card.cardId]?.quality} disabled={Boolean(question || feedback)} showSpeech={!question || question.type === 'meaning'} onClick={() => onCard(card)} />)}</div><div className="battle-footer"><div className="battle-log">{battle.log[0]}</div></div></div>{question && !feedback && <QuestionModal question={question} answer={answer} setAnswer={setAnswer} selectedOption={selectedOption} setSelectedOption={setSelectedOption} onSubmit={onSubmit} onAbandon={onAbandon} />}{feedback && <FeedbackModal feedback={feedback} question={question} onClose={onCloseFeedback} />}</section>
 }
 
-function CardView({ card, disabled, showSpeech = true, onClick }: { card: RuntimeCard; disabled: boolean; showSpeech?: boolean; onClick: () => void }) {
-  return <div className={`game-card-wrap effect-${card.card.effectType} face-${card.face}`}><button className="game-card" disabled={disabled} onClick={onClick}><span className="card-level">LV.{card.card.frequencyLevel}</span><span className="card-face-label">{card.face === 'meaning' ? '识义题' : '拼写题'} · {effectLabel(card.card.effectType)}</span><span className="card-glyph"><IconForEffect type={card.card.effectType} /></span><strong>{card.face === 'meaning' ? card.card.word : card.card.meaning}</strong><small>{card.card.pos}</small><span className="card-effect">{effectDescription(card)}</span></button>{showSpeech && card.face === 'meaning' && <button className="speech-button card-speech-button" aria-label={`播放 ${card.card.word} 的发音`} onClick={(event) => { event.stopPropagation(); speakWord(card.card.word, card.card.pos) }}><Volume2 size={15} /></button>}</div>
+export function CardView({ card, disabled, showSpeech = true, source, quality, onClick }: { card: RuntimeCard; disabled: boolean; showSpeech?: boolean; source?: CardSource; quality?: CardMemoryQuality; onClick: () => void }) {
+  const badge = source === 'due' ? '复习' : source === 'requeue' ? '重现' : null
+  const wrapClass = `game-card-wrap effect-${card.card.effectType} face-${card.face}${source ? ` source-${source}` : ''}${quality ? ` quality-${quality}` : ''}`
+  return <div className={wrapClass}>{badge && <span className={`review-badge source-${source}`}>{badge}</span>}<button className="game-card" disabled={disabled} onClick={onClick}><span className="card-level">LV.{card.card.frequencyLevel}</span><span className="card-face-label">{card.face === 'meaning' ? '识义题' : '拼写题'} · {effectLabel(card.card.effectType)}</span><span className="card-glyph"><IconForEffect type={card.card.effectType} /></span><strong>{card.face === 'meaning' ? card.card.word : card.card.meaning}</strong><small>{card.card.pos}</small><span className="card-effect">{effectDescription(card)}</span></button>{showSpeech && card.face === 'meaning' && <button className="speech-button card-speech-button" aria-label={`播放 ${card.card.word} 的发音`} onClick={(event) => { event.stopPropagation(); speakWord(card.card.word, card.card.pos) }}><Volume2 size={15} /></button>}</div>
 }
 
-function QuestionModal({ question, answer, setAnswer, selectedOption, setSelectedOption, onSubmit, onAbandon }: { question: QuestionState; answer: string; setAnswer: (value: string) => void; selectedOption: string | null; setSelectedOption: (value: string | null) => void; onSubmit: () => void; onAbandon: () => void }) {
+export function QuestionModal({ question, answer, setAnswer, selectedOption, setSelectedOption, onSubmit, onAbandon }: { question: QuestionState; answer: string; setAnswer: (value: string) => void; selectedOption: string | null; setSelectedOption: (value: string | null) => void; onSubmit: () => void; onAbandon: () => void }) {
   const card = question.card.card
   return <div className="modal-backdrop"><div className="question-modal"><div className="modal-kicker"><span>{question.type === 'meaning' ? 'MEANING CHECK' : 'SPELLING CHECK'}</span><span>LV.{card.frequencyLevel} · {card.frequencyLabel}</span></div>{question.type === 'meaning' ? <><div className="question-word-line"><h2>{card.word}</h2><button className="speech-button" aria-label={`播放 ${card.word} 的发音`} onClick={() => speakWord(card.word, card.pos)}><Volume2 size={18} /></button></div><p className="phonetic">{card.phonetic || '/ pronunciation /'} <span>{card.pos}</span></p><p className="question-prompt">选择最符合的中文释义</p><div className="options">{question.options.map((option, index) => <button className={`option ${selectedOption === option.cardId ? 'selected' : ''}`} key={`${option.cardId}-${index}`} onClick={() => setSelectedOption(option.cardId)}><span>{String.fromCharCode(65 + index)}</span><strong>{option.pos}</strong><em>{option.meaning}</em></button>)}</div></> : <><h2 className="chinese-prompt">{card.meaning}</h2><p className="question-prompt">从首字母开始拼写对应的英文单词</p><p className="first-letter-hint">首字母提示：<strong>{card.word[0].toUpperCase()}</strong></p><div className="spelling-box"><div className="letter-slots">{Array.from({ length: card.word.length }, (_, index) => <span key={index}>{answer[index] || '_'}</span>)}</div><input autoFocus value={answer} maxLength={card.word.length} onChange={(event) => { const next = event.target.value.replace(/[^a-zA-Z]/g, ''); if (!next || next[0].toLowerCase() === card.word[0].toLowerCase()) setAnswer(next) }} onKeyDown={(event) => { if (event.key === 'Enter') onSubmit() }} placeholder="输入完整单词" /></div></>}<div className="answer-actions"><button className="button primary submit-answer" disabled={question.type === 'meaning' ? !selectedOption : answer.length !== card.word.length} onClick={onSubmit}><Check size={17} />提交答案</button>{question.type === 'spelling' && <button className="button give-up" onClick={onAbandon}>放弃本题</button>}</div><p className="modal-hint">答错或放弃会受到 {WRONG_DAMAGE} 点直接伤害</p></div></div>
 }
@@ -611,9 +767,12 @@ function FeedbackModal({ feedback, question, onClose }: { feedback: { correct: b
   return <div className="modal-backdrop"><div className={`feedback-modal ${feedback.correct ? 'is-correct' : 'is-wrong'}`}><div className="feedback-icon">{feedback.correct ? <Check size={30} /> : <CircleHelp size={30} />}</div><span className="feedback-label">{feedback.correct ? 'ANSWER CONFIRMED' : feedback.abandoned ? 'QUESTION SKIPPED' : 'RECALL MISSED'}</span><h2>{feedback.correct ? '答对了' : feedback.abandoned ? '已放弃本题' : '这次没记住'}</h2><p>{feedback.text}</p>{question && <div className="answer-reveal"><div className="answer-word-line"><span>{question.card.card.word}</span><button className="speech-button" aria-label={`播放 ${question.card.card.word} 的发音`} onClick={() => speakWord(question.card.card.word, question.card.card.pos)}><Volume2 size={16} /></button></div><small>{question.card.card.pos} · {question.card.card.meaning}</small></div>}<button className="button primary" onClick={onClose}>继续战斗<ChevronRight size={17} /></button></div></div>
 }
 
-function Result({ battle, library, onAgain, onHome, onStats }: { battle: BattleState; library: CardRecord[]; onAgain: () => void; onHome: () => void; onStats: () => void }) {
+function Result({ battle, library, reviewRunStats, onAgain, onHome, onStats }: { battle: BattleState; library: CardRecord[]; reviewRunStats: { reviewed: number; upgraded: number; downgraded: number }; onAgain: () => void; onHome: () => void; onStats: () => void }) {
   const victory = battle.status === 'victory'
   const errors = battle.errorCardIds.map((id) => library.find((card) => card.cardId === id)).filter(Boolean) as CardRecord[]
+  if (battle.reviewRun) {
+    return <section className="result-page"><div className={`result-icon ${victory ? 'victory' : 'defeat'}`}>{victory ? <RotateCcw size={38} /> : <CircleHelp size={38} />}</div><div className="eyebrow centered-text"><span className="eyebrow-dot" /> REVIEW COMPLETE</div><h1>复习结束</h1><p className="result-lead">本轮到期卡片复习完成。</p><div className="result-stats"><div><strong>{reviewRunStats.reviewed}</strong><span>复习张数</span></div><div><strong>{reviewRunStats.upgraded}</strong><span>升级</span></div><div><strong>{reviewRunStats.downgraded}</strong><span>跌落</span></div><div><strong>{percent(battle.correctAnswers, battle.totalAnswers)}</strong><span>正确率</span></div></div>{errors.length > 0 && <div className="error-words"><div className="section-label">需要再见一面 <span>{errors.length}</span></div><div className="error-list">{errors.slice(0, 6).map((card) => <span key={card.cardId}>{card.word}<small>{card.pos}</small></span>)}</div></div>}<div className="result-actions"><button className="button primary large" onClick={onAgain}><RotateCcw size={17} />返回错题本</button><button className="button ghost large" onClick={onStats}><BarChart3 size={17} />学习统计</button><button className="text-button" onClick={onHome}>返回首页</button></div></section>
+  }
   return <section className="result-page"><div className={`result-icon ${victory ? 'victory' : 'defeat'}`}>{victory ? <Swords size={38} /> : <CircleHelp size={38} />}</div><div className="eyebrow centered-text"><span className="eyebrow-dot" /> {victory ? 'ENCOUNTER CLEARED' : 'ENCOUNTER ENDED'}</div><h1>{victory ? '记忆，赢下一局。' : '遗忘暂时占了上风。'}</h1><p className="result-lead">{victory ? '你把词汇变成了行动。保持这个节奏，下一轮会更稳。' : '每一个错误都是下一次复习的入口。把它们再看一遍，然后重新挑战。'}</p><div className="result-stats"><div><strong>{percent(battle.correctAnswers, battle.totalAnswers)}</strong><span>总体正确率</span></div><div><strong>{battle.usedCards}</strong><span>使用卡牌</span></div><div><strong>{battle.turn}</strong><span>坚持回合</span></div><div><strong>{battle.faceStats.spelling.correct}/{battle.faceStats.spelling.total}</strong><span>拼写正确</span></div></div>{errors.length > 0 && <div className="error-words"><div className="section-label">需要再见一面 <span>{errors.length}</span></div><div className="error-list">{errors.slice(0, 6).map((card) => <span key={card.cardId}>{card.word}<small>{card.pos}</small></span>)}</div></div>}<div className="result-actions"><button className="button primary large" onClick={onAgain}><RotateCcw size={17} />再来一局</button><button className="button ghost large" onClick={onStats}><BarChart3 size={17} />学习统计</button><button className="text-button" onClick={onHome}>返回首页</button></div></section>
 }
 

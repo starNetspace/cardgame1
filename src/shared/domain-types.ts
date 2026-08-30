@@ -139,6 +139,26 @@ export interface CardMemoryRecord {
 
 export type CardMemoryStore = Record<string, CardMemoryRecord>
 
+export type CardMemoryAnswerSource = 'due' | 'requeue'
+export type CardSource = 'new' | 'due' | 'requeue'
+
+export interface RequeueScheduled {
+  cardId: string
+  showAtAnswer: number
+}
+
+/** In-memory (never persisted) scheduling state for the four-new-one-old rhythm and in-session requeue. */
+export interface ReviewSession {
+  newSinceReview: number
+  requeueReady: string[]
+  requeueScheduled: RequeueScheduled[]
+  requeueShown: Record<string, number>
+  answeredCount: number
+  dueUsed: string[]
+}
+
+
+
 
 export interface StudySubgroup {
   subgroupId: string
@@ -233,6 +253,7 @@ export interface BattleState {
   mistakeSource?: 'practice' | 'learning' | 'all'
   mistakePracticeCardIds?: string[]
   mistakeLearningCardIds?: string[]
+  reviewRun?: boolean
   campaignGoal?: 'defeat-all' | 'learn-all'
   campaignSetId?: string
   campaignEnemyQueue?: EnemyDefinition[]
