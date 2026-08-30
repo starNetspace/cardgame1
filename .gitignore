@@ -7,7 +7,7 @@ tools/audio/audio_failures.txt
 
 # Local-only account exports and browser data backups.
 .local/
-accounts/
+/accounts/
 data/local/
 src/accounts/local/
 *.account.json

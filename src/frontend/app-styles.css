@@ -502,6 +502,43 @@ body { color: var(--cream); background: var(--bg); }
 .account-row-actions .button { min-height: 34px; padding: 0 11px; font-size: 11px; }
 .account-row-actions .button.primary { color: #08201d; background: #a7f0df; border-color: #79d7c0; }
 .account-row-actions .button.primary:hover:not(:disabled) { color: #061916; background: #c8faee; }
+.memory-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 24px;
+  padding: 16px;
+  background: #ebe5d8;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.memory-summary span { color: var(--muted); font: 11px 'DM Mono'; }
+.memory-summary strong { margin-left: 5px; color: var(--cyan); font-size: 18px; }
+.memory-record-list { display: grid; gap: 10px; margin-top: 18px; }
+.memory-record { padding: 15px 17px; background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--muted); border-radius: 6px; }
+.memory-record.quality-bronze { border-left-color: #b77b56; }
+.memory-record.quality-silver { border-left-color: #8f93a1; }
+.memory-record.quality-gold { border-left-color: #c59655; }
+.memory-record.quality-mastered { border-left-color: var(--cyan); }
+.memory-record-main { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.memory-record-main > div { min-width: 0; }
+.memory-record-main strong { color: var(--cream); font: 600 16px 'Space Grotesk'; overflow-wrap: anywhere; }
+.memory-record-main small { display: block; margin-top: 6px; color: var(--muted); line-height: 1.5; overflow-wrap: anywhere; }
+.quality-badge { display: inline-block; margin-left: 8px; padding: 3px 7px; border-radius: 3px; font: 10px 'DM Mono'; }
+.quality-badge.quality-bronze { color: #845538; background: #ead1bb; }
+.quality-badge.quality-silver { color: #555b69; background: #dfe1e6; }
+.quality-badge.quality-gold { color: #775426; background: #efddb1; }
+.quality-badge.quality-mastered { color: #fffaf5; background: var(--cyan); }
+.memory-record-meta { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 12px; color: var(--muted); font: 10px 'DM Mono'; }
+.memory-record-meta .is-due { color: var(--red); font-weight: 600; }
+@media (max-width: 560px) {
+  .memory-summary { grid-template-columns: 1fr 1fr; padding: 13px; }
+  .memory-record { padding: 13px; }
+}
+@media (max-width: 360px) {
+  .memory-summary { grid-template-columns: 1fr; }
+}
+
 .account-note { display: flex; align-items: flex-start; gap: 9px; margin-top: 16px; color: var(--muted); font: 10px 'DM Mono'; line-height: 1.6; }
 .account-note svg { flex: 0 0 auto; color: var(--cyan); }
 

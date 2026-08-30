@@ -1,4 +1,4 @@
-import type { BattleMode, BattleState, BattleStore, CardFace, EnemyDefinition, LearningCardMemory, LearningStore, ReviewRecord, ReviewStore } from '../shared/domain-types'
+import type { BattleMode, BattleState, BattleStore, CardFace, CardMemoryHistoryEntry, CardMemoryQuality, CardMemoryRecord, CardMemoryStore, EnemyDefinition, LearningCardMemory, LearningStore, ReviewRecord, ReviewStore } from '../shared/domain-types'
 import { isEnemyDefinition, isCharacterDefinition } from '../library/card-library'
 import { DEFAULT_CHARACTER } from '../battle/battle-rules'
 
@@ -22,7 +22,7 @@ export function getActiveUsername(): string {
   return activeUsername
 }
 
-function accountStorageKey(kind: 'review' | 'learning' | 'battles', username = activeUsername): string {
+function accountStorageKey(kind: 'review' | 'learning' | 'battles' | 'records', username = activeUsername): string {
   return `${ACCOUNT_STORAGE_PREFIX}${encodeURIComponent(normalizeUsername(username) || 'default')}:${kind}`
 }
 
@@ -304,3 +304,100 @@ export function allReviewStats(store: ReviewStore) {
     incorrect: records.reduce((sum, item) => sum + item.incorrect, 0),
   }
 }
+const CARD_MEMORY_STORAGE_KEY = 'records'
+export const MAX_CARD_MEMORY_HISTORY = 100
+const CARD_MEMORY_QUALITIES: CardMemoryQuality[] = ['bronze', 'silver', 'gold', 'mastered']
+const CARD_MEMORY_INTERVALS: Record<CardMemoryQuality, number[]> = {
+  bronze: [4 * 60 * 60 * 1000, 24 * 60 * 60 * 1000, 3 * 24 * 60 * 60 * 1000],
+  silver: [24 * 60 * 60 * 1000, 3 * 24 * 60 * 60 * 1000, 7 * 24 * 60 * 60 * 1000, 14 * 24 * 60 * 60 * 1000],
+  gold: [30 * 24 * 60 * 60 * 1000, 60 * 24 * 60 * 60 * 1000, 90 * 24 * 60 * 60 * 1000],
+  mastered: [90 * 24 * 60 * 60 * 1000, 180 * 24 * 60 * 60 * 1000],
+}
+
+function isCardMemoryQuality(value: unknown): value is CardMemoryQuality {
+  return typeof value === 'string' && CARD_MEMORY_QUALITIES.includes(value as CardMemoryQuality)
+}
+
+function normalizeCardMemoryHistory(value: unknown): CardMemoryHistoryEntry[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((item): item is CardMemoryHistoryEntry => {
+    if (!item || typeof item !== 'object') return false
+    const entry = item as CardMemoryHistoryEntry
+    return Number.isFinite(entry.at) && typeof entry.correct === 'boolean' && (entry.face === 'meaning' || entry.face === 'spelling') && isCardMemoryQuality(entry.quality) && Number.isInteger(entry.streak) && entry.streak >= 0 && Number.isFinite(entry.dueAt) && (entry.abandoned === undefined || typeof entry.abandoned === 'boolean')
+  }).slice(-MAX_CARD_MEMORY_HISTORY)
+}
+
+function normalizeCardMemoryRecord(value: unknown, cardId: string): CardMemoryRecord | null {
+  if (!value || typeof value !== 'object') return null
+  const record = value as CardMemoryRecord
+  if (record.cardId !== cardId || !isCardMemoryQuality(record.quality) || !Number.isInteger(record.streak) || record.streak < 0 || !Number.isFinite(record.dueAt) || !Number.isInteger(record.lapses) || record.lapses < 0) return null
+  return { cardId, quality: record.quality, streak: record.streak, dueAt: record.dueAt, history: normalizeCardMemoryHistory(record.history), lapses: record.lapses }
+}
+
+export function normalizeCardMemoryStore(value: unknown): CardMemoryStore {
+  if (!value || typeof value !== 'object') return {}
+  const output: CardMemoryStore = {}
+  for (const [cardId, candidate] of Object.entries(value)) {
+    const record = normalizeCardMemoryRecord(candidate, cardId)
+    if (record) output[cardId] = record
+  }
+  return output
+}
+
+export function loadCardMemoryStore(username = activeUsername): CardMemoryStore {
+  try {
+    const raw = localStorage.getItem(accountStorageKey(CARD_MEMORY_STORAGE_KEY, username))
+    return normalizeCardMemoryStore(JSON.parse(raw ?? '{}'))
+  } catch {
+    return {}
+  }
+}
+
+export function saveCardMemoryStore(store: CardMemoryStore, username = activeUsername): void {
+  try { localStorage.setItem(accountStorageKey(CARD_MEMORY_STORAGE_KEY, username), JSON.stringify(store)) } catch { /* local-only storage can be unavailable */ }
+}
+
+function qualityIndex(quality: CardMemoryQuality): number {
+  return CARD_MEMORY_QUALITIES.indexOf(quality)
+}
+
+function intervalFor(quality: CardMemoryQuality, streak: number): number {
+  const intervals = CARD_MEMORY_INTERVALS[quality]
+  return intervals[Math.min(Math.max(streak - 1, 0), intervals.length - 1)]
+}
+
+export function updateCardMemory(store: CardMemoryStore, cardId: string, face: CardFace, correct: boolean, now = Date.now(), abandoned = false): CardMemoryStore {
+  const previous = store[cardId]
+  if (!previous && correct) return store
+  const base: CardMemoryRecord = previous ?? { cardId, quality: 'bronze', streak: 0, dueAt: now, history: [], lapses: 0 }
+  const streak = correct ? base.streak + 1 : 0
+  const threshold: Record<CardMemoryQuality, number> = { bronze: 3, silver: 4, gold: 3, mastered: Number.POSITIVE_INFINITY }
+  const quality = correct && streak >= threshold[base.quality]
+    ? CARD_MEMORY_QUALITIES[Math.min(qualityIndex(base.quality) + 1, CARD_MEMORY_QUALITIES.length - 1)]
+    : correct ? base.quality : CARD_MEMORY_QUALITIES[Math.max(0, qualityIndex(base.quality) - 1)]
+  const dueAt = now + intervalFor(quality, correct ? streak : 1)
+  const history = [...base.history, { at: now, correct, face, abandoned: abandoned || undefined, quality, streak, dueAt }].slice(-MAX_CARD_MEMORY_HISTORY)
+  return { ...store, [cardId]: { cardId, quality, streak, dueAt, history, lapses: base.lapses + (correct ? 0 : 1) } }
+}
+
+export function cardMemoryQualityLabel(quality: CardMemoryQuality): string {
+  return ({ bronze: '青铜', silver: '白银', gold: '黄金', mastered: '已掌握' })[quality]
+}
+
+export type CardMemorySort = 'due' | 'recent' | 'lapses' | 'word'
+
+export function sortCardMemoryRecords(records: CardMemoryRecord[], sort: CardMemorySort = 'due', now = Date.now()): CardMemoryRecord[] {
+  return [...records].sort((a, b) => {
+    if (sort === 'recent') return (b.history[b.history.length - 1]?.at ?? 0) - (a.history[a.history.length - 1]?.at ?? 0) || a.cardId.localeCompare(b.cardId)
+    if (sort === 'lapses') return b.lapses - a.lapses || a.dueAt - b.dueAt || a.cardId.localeCompare(b.cardId)
+    if (sort === 'word') return a.cardId.localeCompare(b.cardId)
+    return Number(a.dueAt > now) - Number(b.dueAt > now) || a.dueAt - b.dueAt || a.cardId.localeCompare(b.cardId)
+  })
+}
+
+export function getCardMemorySummary(store: CardMemoryStore, now = Date.now()) {
+  const records = Object.values(store)
+  const byQuality = Object.fromEntries(CARD_MEMORY_QUALITIES.map((quality) => [quality, records.filter((record) => record.quality === quality).length])) as Record<CardMemoryQuality, number>
+  return { total: records.length, due: records.filter((record) => record.dueAt <= now).length, lapses: records.reduce((sum, record) => sum + record.lapses, 0), byQuality }
+}
+
