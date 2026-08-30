@@ -1,0 +1,6 @@
+node_modules/
+dist/
+*.local
+.idea/
+public/audio/
+scripts/audio_failures.txt
