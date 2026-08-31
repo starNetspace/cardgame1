@@ -64,7 +64,7 @@ function enemyState(definition: EnemyDefinition) {
   const startShield = (definition.shield ?? 0) + definition.abilities
     .filter((ability) => ability.type === 'start-shield')
     .reduce((sum, ability) => sum + ability.amount, 0)
-  return { ...definition, hp: definition.maxHp, shield: Math.min(MAX_SHIELD, startShield), turns: 0, abilityCooldowns: {}, reviveUsed: false }
+  return { ...definition, hp: definition.maxHp, shield: Math.min(MAX_SHIELD, startShield), turns: 0, abilityCooldowns: {}, activatedAbilitiesThisTurn: [], reviveUsed: false }
 }
 
 export function characterMaxHp(definition: CharacterDefinition): number {
@@ -234,11 +234,15 @@ export function dealDamageToEnemy(state: BattleState, amount: number): { blocked
   state.turnDamageDealt = (state.turnDamageDealt ?? 0) + damage
   state.enemy.shield -= blocked
   const reviveAbility = state.enemy.abilities.find((ability) => ability.type === 'revive-once')
-  if (damage > 0 && !state.enemy.reviveUsed && reviveAbility && state.enemy.hp - damage <= 0) {
+  const reviveCooldown = reviveAbility?.cooldown
+  const reviveReady = !state.enemy.reviveUsed || ((reviveCooldown ?? 0) > 0 && (state.enemy.abilityCooldowns?.['revive-once'] ?? 0) === 0)
+  if (damage > 0 && reviveReady && reviveAbility && state.enemy.hp - damage <= 0) {
     state.enemy.reviveUsed = true
     state.enemy.shield = 0
     state.enemy.hp = Math.max(1, Math.round(state.enemy.maxHp * Math.min(100, reviveAbility.amount) / 100))
-    state.log = [`${state.enemy.name} 触发一次复活，恢复至 ${state.enemy.hp} 点生命。`, ...state.log].slice(0, 8)
+    if (reviveCooldown !== undefined) state.enemy.abilityCooldowns = { ...(state.enemy.abilityCooldowns ?? {}), 'revive-once': reviveCooldown }
+    state.enemy.activatedAbilitiesThisTurn = [...(state.enemy.activatedAbilitiesThisTurn ?? []), 'revive-once']
+    state.log = [`${state.enemy.name} 触发一次复活，恢复至 ${state.enemy.hp} 点生命${reviveCooldown !== undefined ? `，${reviveCooldown} 回合后可再次复活` : ''}。`, ...state.log].slice(0, 8)
     return { blocked, damage }
   }
   state.enemy.hp = Math.max(0, state.enemy.hp - damage)
@@ -349,6 +353,7 @@ export function campaignEnemyProgress(state: BattleState): { current: number; to
 
 export function finishEnemyTurn(state: BattleState): BattleState {
   const next = structuredClone(state) as BattleState
+  next.enemy.activatedAbilitiesThisTurn = []
   const enemyTurn = next.enemy.turns + 1
   next.enemy.turns = enemyTurn
   next.enemy.abilityCooldowns = Object.fromEntries(Object.entries(next.enemy.abilityCooldowns ?? {}).map(([id, cooldown]) => [id, Math.max(0, cooldown - 1)]))
@@ -380,7 +385,10 @@ export function finishEnemyTurn(state: BattleState): BattleState {
     if (next.player.reflectThisTurn) dealDamageToEnemy(next, incoming)
   } else if (ignoresShield) {
     damage = incoming
-    if (shieldIgnore) next.enemy.abilityCooldowns = { ...(next.enemy.abilityCooldowns ?? {}), 'shield-ignore': shieldIgnore.cooldown ?? 0 }
+    if (shieldIgnore) {
+      next.enemy.abilityCooldowns = { ...(next.enemy.abilityCooldowns ?? {}), 'shield-ignore': shieldIgnore.cooldown ?? 0 }
+      next.enemy.activatedAbilitiesThisTurn = [...(next.enemy.activatedAbilitiesThisTurn ?? []), 'shield-ignore']
+    }
   } else {
     blocked = Math.min(next.player.shield, incoming)
     damage = incoming - blocked
@@ -408,3 +416,5 @@ export function finishEnemyTurn(state: BattleState): BattleState {
   if (next.player.hp <= 0) next.status = 'defeat'
   return next
 }
+
+

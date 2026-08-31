@@ -396,6 +396,8 @@ body { color: var(--cream); background: var(--bg); }
 .enemy-abilities { display: grid; gap: 5px; margin-top: 12px; color: var(--orange); font: 10px 'DM Mono'; line-height: 1.4; }
 .enemy-abilities span { display: flex; align-items: flex-start; gap: 6px; }
 .enemy-abilities svg { flex: 0 0 auto; margin-top: 1px; }
+.enemy-abilities .enemy-ability.active { color: var(--red); }
+.enemy-abilities .enemy-ability-flag { margin-left: auto; flex: 0 0 auto; padding: 1px 5px; color: #fffaf5; background: var(--red); border-radius: 3px; font: 9px 'DM Mono'; white-space: nowrap; }
 
 @media (max-width: 800px) {
   .menu-action-column { min-width: 0; }

@@ -378,15 +378,34 @@ describe('battle rules', () => {
     shieldIgnoreBattle.player.shield = 10
     const ignored = finishEnemyTurn(shieldIgnoreBattle)
     expect(ignored.player.hp).toBe(26)
+    expect(ignored.enemy.activatedAbilitiesThisTurn).toContain('shield-ignore')
+    const nextTurn = finishEnemyTurn(ignored)
+    expect(nextTurn.enemy.activatedAbilitiesThisTurn ?? []).not.toContain('shield-ignore')
     expect(ignored.enemy.abilityCooldowns?.['shield-ignore']).toBe(2)
 
     const reviveEnemy: EnemyDefinition = { id: 'hiro', name: 'HIRO', subtitle: '二阶堂', maxHp: 30, attack: 4, shield: 0, abilities: [{ type: 'revive-once', amount: 50, cooldown: 10, description: '复活' }] }
     const reviveBattle = createBattle([], [], 'practice', reviveEnemy)
     dealDamageToEnemy(reviveBattle, 30)
     expect(reviveBattle.enemy.hp).toBe(15)
+    expect(reviveBattle.enemy.activatedAbilitiesThisTurn).toContain('revive-once')
     expect(reviveBattle.enemy.reviveUsed).toBe(true)
     dealDamageToEnemy(reviveBattle, 15)
     expect(reviveBattle.enemy.hp).toBe(0)
+    // 复活冷却 10 回合：复活后 10 个敌方回合内再次被击杀不会复活，
+    // 但 10 回合后若仍未被击败，可再次触发复活。
+    const cooldownBattle = createBattle([], [], 'practice', reviveEnemy)
+    dealDamageToEnemy(cooldownBattle, 30)
+    expect(cooldownBattle.enemy.hp).toBe(15)
+    expect(cooldownBattle.enemy.abilityCooldowns?.['revive-once']).toBe(10)
+    dealDamageToEnemy(cooldownBattle, 15)
+    expect(cooldownBattle.enemy.hp).toBe(0)
+    cooldownBattle.enemy.hp = 30
+    let afterTurns = cooldownBattle
+    for (let turn = 0; turn < 10; turn += 1) afterTurns = finishEnemyTurn(afterTurns)
+    expect(afterTurns.enemy.abilityCooldowns?.['revive-once']).toBe(0)
+    dealDamageToEnemy(afterTurns, 30)
+    expect(afterTurns.enemy.hp).toBe(15)
+    expect(afterTurns.enemy.reviveUsed).toBe(true)
 
     const instantKillEnemy: EnemyDefinition = { id: 'yuki', name: 'YUKI', subtitle: '雪', maxHp: 30, attack: 4, shield: 0, abilities: [{ type: 'instant-kill-at-turn', amount: 0, turnLimit: 2, description: '第 2 回合击杀' }] }
     const instantKillBattle = createBattle([], [], 'practice', instantKillEnemy)
@@ -396,3 +415,5 @@ describe('battle rules', () => {
     expect(killed.player.hp).toBe(0)
   })
 })
+
+

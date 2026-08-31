@@ -10,7 +10,7 @@
           { "id": "warden", "name": "WARDEN", "subtitle": "典狱长", "avatar": "Warden.png", "maxHp": 38, "attack": 4, "shield": 0, "abilities": [] },
           { "id": "jailer", "name": "JAILER", "subtitle": "学姐", "avatar": "Jailer.png", "maxHp": 50, "attack": 5, "shield": 0, "abilities": [{ "type": "attack-scaling", "amount": 1, "everyTurns": 3, "description": "每 3 回合攻击力 +1" }] },
           { "id": "hanoka", "name": "HANOKA", "subtitle": "穗乃香", "avatar": "Hanoka.png", "maxHp": 55, "attack": 6, "shield": 2, "abilities": [{ "type": "shield-ignore", "amount": 1, "cooldown": 2, "description": "攻击无视护盾，冷却 2 回合" }] },
-          { "id": "hiro", "name": "HIRO", "subtitle": "二阶堂", "avatar": "Hiro.png", "maxHp": 63, "attack": 7, "shield": 0, "abilities": [{ "type": "revive-once", "amount": 50, "cooldown": 10, "description": "首次死亡时以 50% 最大生命复活一次" }] },
+          { "id": "hiro", "name": "HIRO", "subtitle": "二阶堂", "avatar": "Hiro.png", "maxHp": 63, "attack": 7, "shield": 0, "abilities": [{ "type": "revive-once", "amount": 50, "cooldown": 10, "description": "死亡时以 50% 最大生命复活，10 回合后若未被击败可再次复活" }] },
           { "id": "yuki", "name": "YUKI", "subtitle": "雪", "avatar": "Yuki.png", "maxHp": 76, "attack": 8, "shield": 2, "isFinal": true, "abilities": [{ "type": "fixed-shield-per-turn", "amount": 3, "description": "每回合获得 3 点护盾" }, { "type": "instant-kill-at-turn", "amount": 0, "turnLimit": 15, "description": "第 15 回合直接击杀玩家" }] }
         ]
       }
@@ -26,7 +26,7 @@
           { "id": "warden", "name": "WARDEN", "subtitle": "典狱长", "avatar": "Warden.png", "maxHp": 38, "attack": 4, "shield": 0, "abilities": [] },
           { "id": "jailer", "name": "JAILER", "subtitle": "学姐", "avatar": "Jailer.png", "maxHp": 50, "attack": 5, "shield": 0, "abilities": [{ "type": "attack-scaling", "amount": 1, "everyTurns": 3, "description": "每 3 回合攻击力 +1" }] },
           { "id": "hanoka", "name": "HANOKA", "subtitle": "穗乃香", "avatar": "Hanoka.png", "maxHp": 55, "attack": 6, "shield": 2, "abilities": [{ "type": "shield-ignore", "amount": 1, "cooldown": 2, "description": "攻击无视护盾，冷却 2 回合" }] },
-          { "id": "hiro", "name": "HIRO", "subtitle": "二阶堂", "avatar": "Hiro.png", "maxHp": 63, "attack": 7, "shield": 0, "abilities": [{ "type": "revive-once", "amount": 50, "cooldown": 10, "description": "首次死亡时以 50% 最大生命复活一次" }] },
+          { "id": "hiro", "name": "HIRO", "subtitle": "二阶堂", "avatar": "Hiro.png", "maxHp": 63, "attack": 7, "shield": 0, "abilities": [{ "type": "revive-once", "amount": 50, "cooldown": 10, "description": "死亡时以 50% 最大生命复活，10 回合后若未被击败可再次复活" }] },
           { "id": "yuki", "name": "YUKI", "subtitle": "雪", "avatar": "Yuki.png", "maxHp": 76, "attack": 8, "shield": 2, "isFinal": true, "abilities": [{ "type": "fixed-shield-per-turn", "amount": 3, "description": "每回合获得 3 点护盾" }, { "type": "instant-kill-at-turn", "amount": 0, "turnLimit": 15, "description": "第 15 回合直接击杀玩家" }] }
         ]
       }
