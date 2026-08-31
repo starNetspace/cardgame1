@@ -64,7 +64,7 @@ function enemyState(definition: EnemyDefinition) {
   const startShield = (definition.shield ?? 0) + definition.abilities
     .filter((ability) => ability.type === 'start-shield')
     .reduce((sum, ability) => sum + ability.amount, 0)
-  return { ...definition, hp: definition.maxHp, shield: Math.min(MAX_SHIELD, startShield), turns: 0, abilityCooldowns: {}, activatedAbilitiesThisTurn: [], reviveUsed: false }
+  return { ...definition, hp: definition.maxHp, shield: Math.min(MAX_SHIELD, startShield), turns: 0, abilityCooldowns: {}, reviveUsed: false }
 }
 
 export function characterMaxHp(definition: CharacterDefinition): number {
@@ -212,9 +212,12 @@ export function applyCardEffect(state: BattleState, card: RuntimeCard): { state:
     case 'draw': {
       const amount = spellingBonus(card.face, 1 + Math.floor(level / 2)) * multiplier
       const needsSpelling = !next.hand.some((item) => item.face === 'spelling')
-      next.hand = [...next.hand, ...makeRuntimeCards(next.drawPile.slice(0, amount), Math.random, needsSpelling)].slice(0, MAX_HAND)
-      next.drawPile = next.drawPile.slice(Math.min(amount, next.drawPile.length))
-      summary = `抽取 ${amount} 张牌`
+      const drawn = next.drawPile.slice(0, amount)
+      const accepted = drawn.slice(0, Math.max(0, MAX_HAND - next.hand.length))
+      const overflowCards = drawn.slice(accepted.length)
+      next.hand = [...next.hand, ...makeRuntimeCards(accepted, Math.random, needsSpelling)]
+      next.drawPile = [...next.drawPile.slice(Math.min(amount, next.drawPile.length)), ...overflowCards]
+      summary = overflowCards.length > 0 ? `抽取 ${amount} 张牌，手牌已满，${overflowCards.length} 张放回牌库` : `抽取 ${amount} 张牌`
       break
     }
     case 'heal': {
@@ -241,7 +244,6 @@ export function dealDamageToEnemy(state: BattleState, amount: number): { blocked
     state.enemy.shield = 0
     state.enemy.hp = Math.max(1, Math.round(state.enemy.maxHp * Math.min(100, reviveAbility.amount) / 100))
     if (reviveCooldown !== undefined) state.enemy.abilityCooldowns = { ...(state.enemy.abilityCooldowns ?? {}), 'revive-once': reviveCooldown }
-    state.enemy.activatedAbilitiesThisTurn = [...(state.enemy.activatedAbilitiesThisTurn ?? []), 'revive-once']
     state.log = [`${state.enemy.name} 触发一次复活，恢复至 ${state.enemy.hp} 点生命${reviveCooldown !== undefined ? `，${reviveCooldown} 回合后可再次复活` : ''}。`, ...state.log].slice(0, 8)
     return { blocked, damage }
   }
@@ -263,13 +265,15 @@ export function drawTurnCards(state: BattleState, cards: import('../shared/domai
   const next = structuredClone(state) as BattleState
   const availableSlots = Math.max(0, MAX_HAND - next.hand.length)
   const accepted = cards.slice(0, availableSlots)
-  const overflow = Math.max(0, cards.length - accepted.length)
+  const overflowCards = cards.slice(availableSlots)
+  const overflow = overflowCards.length
   const needsSpelling = !next.hand.some((item) => item.face === 'spelling')
   next.hand = [...next.hand, ...makeRuntimeCards(accepted, Math.random, needsSpelling)]
-  next.discardCount += overflow
   next.player.hp = Math.max(0, next.player.hp - overflow * FULL_HAND_DAMAGE)
   if (overflow > 0) {
-    next.log = [`手牌已满，${overflow} 张抽到的牌进入弃牌堆，受到 ${overflow * FULL_HAND_DAMAGE} 点真实伤害。`, ...next.log].slice(0, 8)
+    // Overflow cards return to the draw pile so they are never lost from a learning run.
+    next.drawPile = [...next.drawPile, ...overflowCards]
+    next.log = [`手牌已满，${overflow} 张抽到的牌放回牌库，受到 ${overflow * FULL_HAND_DAMAGE} 点真实伤害。`, ...next.log].slice(0, 8)
   }
   if (next.player.hp <= 0) next.status = 'defeat'
   return { state: next, overflow }
@@ -353,7 +357,6 @@ export function campaignEnemyProgress(state: BattleState): { current: number; to
 
 export function finishEnemyTurn(state: BattleState): BattleState {
   const next = structuredClone(state) as BattleState
-  next.enemy.activatedAbilitiesThisTurn = []
   const enemyTurn = next.enemy.turns + 1
   next.enemy.turns = enemyTurn
   next.enemy.abilityCooldowns = Object.fromEntries(Object.entries(next.enemy.abilityCooldowns ?? {}).map(([id, cooldown]) => [id, Math.max(0, cooldown - 1)]))
@@ -386,8 +389,7 @@ export function finishEnemyTurn(state: BattleState): BattleState {
   } else if (ignoresShield) {
     damage = incoming
     if (shieldIgnore) {
-      next.enemy.abilityCooldowns = { ...(next.enemy.abilityCooldowns ?? {}), 'shield-ignore': shieldIgnore.cooldown ?? 0 }
-      next.enemy.activatedAbilitiesThisTurn = [...(next.enemy.activatedAbilitiesThisTurn ?? []), 'shield-ignore']
+    if (shieldIgnore) next.enemy.abilityCooldowns = { ...(next.enemy.abilityCooldowns ?? {}), 'shield-ignore': shieldIgnore.cooldown ?? 0 }
     }
   } else {
     blocked = Math.min(next.player.shield, incoming)
@@ -416,5 +418,6 @@ export function finishEnemyTurn(state: BattleState): BattleState {
   if (next.player.hp <= 0) next.status = 'defeat'
   return next
 }
+
 
 

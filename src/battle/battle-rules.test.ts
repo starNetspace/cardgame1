@@ -249,7 +249,8 @@ describe('battle rules', () => {
     const result = drawTurnCards(battle, [cards[0], cards[1], cards[2]])
     expect(result.overflow).toBe(3)
     expect(result.state.hand).toHaveLength(8)
-    expect(result.state.discardCount).toBe(3)
+    expect(result.state.discardCount).toBe(0)
+    expect(result.state.drawPile).toEqual([cards[0], cards[1], cards[2]])
     expect(result.state.player.hp).toBe(24)
     expect(result.state.player.shield).toBe(7)
   })
@@ -378,16 +379,12 @@ describe('battle rules', () => {
     shieldIgnoreBattle.player.shield = 10
     const ignored = finishEnemyTurn(shieldIgnoreBattle)
     expect(ignored.player.hp).toBe(26)
-    expect(ignored.enemy.activatedAbilitiesThisTurn).toContain('shield-ignore')
-    const nextTurn = finishEnemyTurn(ignored)
-    expect(nextTurn.enemy.activatedAbilitiesThisTurn ?? []).not.toContain('shield-ignore')
     expect(ignored.enemy.abilityCooldowns?.['shield-ignore']).toBe(2)
 
     const reviveEnemy: EnemyDefinition = { id: 'hiro', name: 'HIRO', subtitle: '二阶堂', maxHp: 30, attack: 4, shield: 0, abilities: [{ type: 'revive-once', amount: 50, cooldown: 10, description: '复活' }] }
     const reviveBattle = createBattle([], [], 'practice', reviveEnemy)
     dealDamageToEnemy(reviveBattle, 30)
     expect(reviveBattle.enemy.hp).toBe(15)
-    expect(reviveBattle.enemy.activatedAbilitiesThisTurn).toContain('revive-once')
     expect(reviveBattle.enemy.reviveUsed).toBe(true)
     dealDamageToEnemy(reviveBattle, 15)
     expect(reviveBattle.enemy.hp).toBe(0)
@@ -414,6 +411,13 @@ describe('battle rules', () => {
     expect(killed.status).toBe('defeat')
     expect(killed.player.hp).toBe(0)
   })
+  it('returns draw-card overflow back to the draw pile', () => {
+    const battle = createBattle([cards[0], cards[1], cards[2]], Array.from({ length: 7 }, (_, index) => runtime(cards[index % cards.length], 'meaning')))
+    const result = applyCardEffect(battle, runtime(cards[3]))
+    expect(result.state.hand).toHaveLength(8)
+    expect(result.state.drawPile.map((card) => card.cardId)).toEqual(['b', 'c'])
+  })
 })
+
 
 

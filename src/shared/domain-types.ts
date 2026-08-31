@@ -218,7 +218,6 @@ export interface EnemyState {
   turns: number
   abilities: EnemyAbility[]
   abilityCooldowns?: Record<string, number>
-  activatedAbilitiesThisTurn?: string[]
   reviveUsed?: boolean
 }
 
