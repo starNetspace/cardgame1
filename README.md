@@ -1,17 +1,23 @@
-# CET-6 单机卡牌背词游戏
+# LEXICON DUEL（CET-6 单机卡牌背词游戏）
 
-这是一个基于 React、TypeScript 和 Vite 的本地浏览器游戏。它使用 CET-6 词卡进行答题和战斗：
+这是一个基于 React、TypeScript 和 Vite 的本地浏览器卡牌背词游戏：用 CET-6 词卡答题战斗，击败敌人，在对战中记住单词。每个单词都会以"识义题"和"拼写题"两张卡出现，词性决定卡牌效果，频率等级决定卡牌强度；答题记录、复习记忆和战斗残局全部保存在浏览器 `localStorage`，无需后端。
 
-- 识义题：根据英文单词选择中文释义。
-- 拼写题：根据中文释义，从首字母开始拼写英文单词。
-- 词性决定卡牌效果，频率等级决定卡牌强度。
-- 答题记录和战斗残局保存在浏览器 `localStorage` 中，不需要后端。
+详细数值规则见 [GAME_RULES.md](./GAME_RULES.md)。
+
+## 功能特性
+
+- **双面词卡**：识义题 5 选 1 选释义；拼写题从首字母开始拼写单词。
+- **词性定效果**：动词=攻击、名词=护盾、形容词=强化、副词=抽牌、其余=回复。
+- **频率定强度**：L1～L5 频率等级决定卡牌数值，拼写面效果 ×1.25。
+- **三种玩法**：学习（60 张卡组战役）、练习（全词库 + 四新一旧复习混入）、错题本（到期复习 + 错题练习）。
+- **记忆复习系统**：青铜 → 白银 → 黄金 → 已掌握四品质间隔复习，局内重现，错题加权抽牌。
+- **角色与战役**：11 名角色技能、5 名敌人战役（成长、无视护盾、复活、即死等机制）。
+- **本地账号**：多账号数据隔离，支持导出/导入 JSON。
+- **单词发音**：本地 MP3 + 浏览器语音兜底。
 
 ## 本地运行
 
-需要安装 Node.js 18 或更高版本。
-
-在项目根目录执行：
+需要 Node.js 18 或更高版本。在项目根目录执行：
 
 ```bash
 npm install
@@ -26,157 +32,99 @@ http://localhost:5173/
 
 如果 5173 端口被占用，Vite 会自动选择其他端口。
 
-## 检查和构建
-
-运行单元测试：
+## 测试与构建
 
 ```bash
-npm test
+npm test        # 运行单元测试（Vitest）
+npm run build   # 类型检查 + 生产构建，输出到 dist/
 ```
 
-生成生产版本：
+生产文件生成在 `dist/` 目录；开发时修改 `src` 文件后浏览器会自动刷新。
 
-```bash
-npm run build
-```
+## 技术栈
 
-生产文件会生成在 `dist` 文件夹中。开发时修改 `src` 文件后，浏览器会自动刷新。
+- React 19 + TypeScript
+- Vite 8（构建）/ Vitest 4（测试）
+- lucide-react（图标）
 
 ## 目录结构
 
 ```text
 .
 ├─ config/
-│  ├─ vite.config.ts             # Vite 开发和生产构建配置
-│  └─ typescript/
-│     ├─ tsconfig.json           # TypeScript 总配置
-│     ├─ tsconfig.app.json       # 应用源码 TypeScript 配置
-│     └─ tsconfig.node.json      # Vite 配置 TypeScript 配置
+│  ├─ vite.config.ts             # Vite 开发与生产构建配置
+│  └─ typescript/                # TypeScript 工程配置（app / node）
 ├─ public/
 │  └─ library/
-│     ├─ cards/cet6_cards.json   # 清洗后的 CET-6 词卡
+│     ├─ cards/cet6_cards.json   # CET-6 词卡数据（10,341 词条）
 │     ├─ campaigns.json          # 战役敌人配置
 │     ├─ characters.json         # 角色配置
-│     └─ avatars/                # 角色和敌人头像
+│     └─ avatars/                # 角色与敌人头像
 ├─ src/
-│  ├─ frontend/
-│  │  ├─ index.html              # Vite 页面入口
-│  │  ├─ vite-env.d.ts           # Vite 类型声明
-│  │  ├─ main.tsx                # React 入口
-│  │  ├─ GameApp.tsx             # 页面、战斗流程和交互
-│  │  └─ app-styles.css          # 页面样式和响应式布局
-│  ├─ battle/
-│  │  ├─ battle-rules.ts         # 战斗规则和卡牌效果
-│  │  ├─ question-engine.ts      # 识义题、拼写题和判题
-│  │  ├─ pronunciation.ts        # 本地 MP3 播放与 Web Speech 兜底
-│  │  └─ *.test.ts               # 战斗相关测试
-│  ├─ library/
-│  │  ├─ card-library.ts         # 词卡清洗、抽牌和卡面生成
-│  │  ├─ study-decks.ts          # 学习模式固定卡组生成
-│  │  └─ *.test.ts               # 牌库和卡组测试
-│  ├─ accounts/
-│  │  ├─ account-manager.ts      # 本地账号切换和导入导出
-│  │  ├─ local-progress.ts       # localStorage 复习记录和战斗存档
-│  │  └─ *.test.ts               # 账号和进度测试
-│  └─ shared/
-│     └─ domain-types.ts         # 跨模块共享数据类型
+│  ├─ frontend/                  # React 页面、战斗交互与样式（GameApp.tsx / app-styles.css）
+│  ├─ battle/                    # 战斗规则、答题引擎、发音（battle-rules.ts / question-engine.ts / pronunciation.ts）
+│  ├─ library/                   # 词卡清洗、抽牌、学习卡组生成（card-library.ts / study-decks.ts）
+│  ├─ accounts/                  # 本地账号、复习记录、记忆档案、战斗存档（account-manager.ts / local-progress.ts）
+│  └─ shared/                    # 跨模块共享数据类型（domain-types.ts）
 ├─ tools/
-│  └─ audio/
-│     └─ gen_audio.py               # 本地生成单词 MP3 的脚本
-├─ package.json                  # npm 依赖和运行脚本，必须保留在根目录
-├─ package-lock.json             # 已锁定的依赖版本，必须保留在根目录
-├─ README.md                     # 项目说明
-└─ .gitignore                    # Git 忽略规则
+│  └─ audio/gen_audio.py         # 生成本地单词 MP3 的脚本
+├─ package.json                  # npm 依赖与运行脚本
+├─ README.md                     # 项目介绍（本文档）
+├─ GAME_RULES.md                 # 详细游戏规则
+└─ .gitignore
 ```
 
-`dist/`、`node_modules/` 和 `.idea/` 是生成或本地工具目录，不属于源码结构；其中 `dist/` 和 `node_modules/` 已被 Git 忽略。`public/data/`、`public/icon/` 和旧的 `src/game/` 已确认为空且无引用，因此不再保留。
+`dist/`、`node_modules/` 是生成或本地依赖目录，已被 Git 忽略。
+
 ## 常用修改位置
 
-### 修改战斗数值
+### 战斗数值
 
 打开 `src/battle/battle-rules.ts`，可以修改：
 
-- `MAX_HAND`：手牌上限。
-- `TURN_DRAW`：每回合抽牌数。
-- `TURN_ENERGY`：每回合行动力。
-- `WRONG_DAMAGE`：答错惩罚。
-- `effectDescription` 和 `applyCardEffect`：卡牌效果说明与实际结算。
-- `createBattle`：玩家和敌人的初始属性。
+- `MAX_HAND`：手牌上限（默认 8）。
+- `TURN_DRAW`：每回合抽牌数（默认 5）。
+- `TURN_ENERGY`：每回合行动力（默认 3）。
+- `WRONG_DAMAGE`：答错/放弃惩罚（默认 2）。
+- `FULL_HAND_DAMAGE`：手牌溢出每张惩罚（默认 2）。
+- `SPELLING_BONUS_MULTIPLIER`：拼写面效果加成（默认 1.25）。
+- `effectDescription` 与 `applyCardEffect`：卡牌效果说明与实际结算，修改时必须同步更新。
 
-修改效果时需要同时更新 `effectDescription` 和 `applyCardEffect`，确保卡面文字和实际效果一致。
+### 角色与技能
 
-### 角色、头像与技能模板
+角色统一配置在 `public/library/characters.json`，每个角色可配置 `maxHp`、初始 `shield`、`avatar` 与多个被动/主动技能。当前提供 11 名角色（EMA、ANAN、SHERRY、HANNA、MERURU、NANOKA、MARGO、MIRIA、ALISA、COCO、LEIA）。修改 `selectedCharacterId` 可切换默认角色。
 
-角色和角色技能统一配置在 `public/library/characters.json`。每个角色可以配置 `maxHp`、初始 `shield`、`avatar` 和多个技能；头像文件名只需要填写 `public/library/avatars/` 下的文件名即可。
+### 敌人与战役
 
-修改 `selectedCharacterId` 可以快捷切换默认角色。例如：
+敌人配置在 `public/library/campaigns.json`，支持 10 种技能模板：每回合护盾、攻击成长、初始护盾、每回合回复、狂暴、固定追加伤害、破盾、无视护盾、复活、即死。当前标准敌人组：
 
-```json
-{
-  "version": 2,
-  "selectedCharacterId": "memory-sentinel"
-}
-```
+| 序 | 敌人 | 昵称 | 生命 | 攻击 | 技能 |
+| --- | --- | --- | ---: | ---: | --- |
+| 1 | WARDEN | 典狱长 | 38 | 4 | — |
+| 2 | JAILER | 学姐 | 50 | 5 | 每 3 回合攻击 +1 |
+| 3 | HANOKA | 穗乃香 | 55 | 6 | 攻击无视护盾（冷却 2） |
+| 4 | HIRO | 二阶堂 | 63 | 7 | 死亡时以 50% 生命复活（冷却 10） |
+| 5 | YUKI | 雪（最终） | 76 | 8 | 每回合 +3 护盾；第 15 回合即死 |
 
-当前提供 7 类己方技能模板：
+新增技能时需要同时扩展 `src/shared/domain-types.ts` 的联合类型、`src/library/card-library.ts` 的配置校验和 `src/battle/battle-rules.ts` 的结算逻辑。
 
-- `passive-start-shield`：战斗开始时获得额外护盾。
-- `passive-max-hp`：增加最大生命。
-- `passive-heal-per-turn`：每回合结束后回复生命。
-- `passive-card-bonus`：攻击牌和防御牌数值增加。
-- `active-heal`：主动回复生命，不消耗行动力，按冷却回合限制。
-- `active-shield`：主动获得护盾，不消耗行动力，护盾溢出仍会转为伤害。
-- `active-damage`：主动对敌人造成伤害，不消耗行动力，按冷却回合限制。
-
-当前提供 7 类敌方技能模板，配置在 `public/library/campaigns.json` 的敌人 `abilities` 中：
-
-- `fixed-shield-per-turn`：每回合获得护盾。
-- `attack-scaling`：每隔指定回合提高攻击力。
-- `start-shield`：战斗开始时获得护盾。
-- `heal-per-turn`：每回合回复生命。
-- `enrage`：生命低于阈值后提高攻击力。
-- `direct-damage-per-turn`：攻击后追加固定生命伤害。
-- `shield-breaker`：玩家有护盾时追加穿透伤害。
-
-新增技能时，需要同时扩展 `src/shared/domain-types.ts` 的联合类型、`src/library/card-library.ts` 的配置校验，以及 `src/battle/battle-rules.ts` 的结算逻辑。
-
-### 当前敌人基础数值
-
-练习模式每套路线固定 5 名敌人，第二条路线用于提供护盾、回复、成长和穿透等进阶机制。当前数值如下：
-
-| 路线 | 敌人 | 生命 | 攻击 |
-| --- | --- | ---: | ---: |
-| 遗忘遗迹 | 遗迹斥候 | 30 | 3 |
-| 遗忘遗迹 | 灰烬守卫 | 40 | 4 |
-| 遗忘遗迹 | 记忆汲取者 | 48 | 5 |
-| 遗忘遗迹 | 铁甲壳 | 56 | 6 |
-| 遗忘遗迹 | 遗忘者 | 66 | 8 |
-| 钢铁回路 | 电压兽 | 34 | 4 |
-| 钢铁回路 | 回忆之火 | 42 | 5 |
-| 钢铁回路 | 档案守卫 | 50 | 5 |
-| 钢铁回路 | 空白之眼 | 58 | 6 |
-| 钢铁回路 | 回路之王 | 70 | 8 |
-
-第一条路线总生命为 240，第二条路线总生命为 254。按攻击牌基础伤害 `3～7`、每回合最多 3 次有效行动、每回合抽 5 张牌计算，配合防御牌、强化牌和后续角色技能，目标是约 30 回合、约 150 张牌完成一条练习路线。敌人技能会增加实际消耗，因此进阶路线保留了适度余量；后续增加更强角色或敌人技能时，优先调整敌人生命而不是基础攻击，避免答错惩罚和敌方攻击同时放大造成跳变。
-### 修改词性效果
+### 词性效果映射
 
 打开 `src/library/card-library.ts` 中的 `effectForPos`，可以调整原始词性到战斗效果的映射。
 
-### 修改答题逻辑
+### 答题逻辑
 
 打开 `src/battle/question-engine.ts`：
 
-- `buildMeaningQuestion` 负责生成相同词性的识义选项。
-- `buildSpellingQuestion` 负责生成拼写题。
-- `isSpellingCorrect` 负责判断拼写答案。
+- `buildMeaningQuestion`：生成同词性的识义题选项。
+- `buildSpellingQuestion`：生成拼写题。
+- `isSpellingCorrect`：判断拼写答案。
 
-战斗中答题完成后的效果结算位于 `src/frontend/GameApp.tsx` 的 `completeAnswer`。
+答题完成后的结算位于 `src/frontend/GameApp.tsx` 的 `completeAnswer`。
 
-### 修改词卡数据
+### 词卡数据
 
-词库唯一存放在 `public/library/cards/cet6_cards.json`，浏览器直接请求该静态文件。程序载入后会进行去重、释义清洗和格式整理，原始 JSON 不会在浏览器中被修改。
-
-词卡至少需要包含这些字段：
+词库唯一存放在 `public/library/cards/cet6_cards.json`（10,341 词条），浏览器直接请求该静态文件；程序载入后会进行去重、释义清洗与格式整理，原始 JSON 不会被修改。字段示例：
 
 ```json
 {
@@ -190,51 +138,30 @@ npm run build
 }
 ```
 
-其中 `frequencyLevel` 必须是 1 到 5 的整数。`effectType` 不需要手动填写，程序会根据 `pos` 自动生成。
+`frequencyLevel` 必须是 1～5 的整数；`effectType` 无需手动填写，程序会根据 `pos` 自动生成。
 
 ### 单词发音
 
-发音采用两层路径：如果存在由 `tools/audio/gen_audio.py` 生成的本地 MP3，优先播放本地音频；音频或 manifest 缺失、播放失败时，自动回落到浏览器 Web Speech API。发音按钮只会出现在识义题、答题反馈和词库浏览页，拼写题提交或放弃前不会显示或自动播放。
-
-生成本地音频需要联网，并且不会在 `npm run dev` 或 `npm run build` 时自动执行：
+发音采用两层路径：优先播放 `tools/audio/gen_audio.py` 生成的本地 MP3（写入 `public/audio/`，该目录被 Git 忽略），音频缺失或播放失败时自动回落到浏览器 Web Speech API。生成本地音频需要联网且不会在 `dev`/`build` 时自动执行：
 
 ```bash
 python -m pip install edge-tts
 python tools/audio/gen_audio.py
 ```
 
-可选参数：`--voice en-US-AriaNeural` 更换声音，`--max-level 2` 只生成 L1/L2 词汇。生成结果写入 `public/audio/`，该目录会被 Git 忽略；由于 Vite 会将 `public/` 全量复制到 `dist/`，完整音频库可能占用几十 MB，长期维护可考虑 Git LFS。edge-tts 适合个人学习使用；若未来公开分发，建议改用 Azure TTS 付费层并确认授权。
+可选参数：`--voice en-US-AriaNeural` 更换声音，`--max-level 2` 只生成 L1/L2 词汇。
 
-脚本完成后，可重点检查这些词的音频：
+### 主题与布局
 
-- 异音词 10 个：`lead`、`record`、`live`、`present`、`increase`、`object`、`content`、`minute`、`refuse`、`project`
-- 缩写词 5 个：`CEO`、`UFO`、`NGO`、`GDP`、`AIDS`
-- 复杂辅音簇词 5 个：`strengths`、`scripts`、`texts`、`glimpsed`、`twelfths`
-- 高频普通词 10 个：`ability`、`abandon`、`achieve`、`affect`、`allow`、`approach`、`benefit`、`concern`、`develop`、`environment`
-
-以上是定向试听建议，当前实现环境无法试听生成的音频。
-
-### 修改主题和布局
-
-打开 `src/frontend/app-styles.css` 文件最前面的 `:root`，可以修改主要颜色变量：
-
-- `--bg`：页面背景。
-- `--panel`：面板背景。
-- `--cream`：主要文字。
-- `--muted`：辅助文字。
-- `--cyan`：主要强调色。
-- `--orange`：行动力和等级强调色。
-- `--red`：危险、错误和敌人颜色。
-- `--blue`：护盾颜色。
+打开 `src/frontend/app-styles.css` 最前面的 `:root`，可修改主要颜色变量：`--bg`（背景）、`--panel`（面板）、`--cream`（主要文字）、`--muted`（辅助文字）、`--cyan`（强调色）、`--orange`（行动力/等级）、`--red`（危险/错误/敌人）、`--blue`（护盾）。
 
 ## 本地数据说明
 
-账号注册表、复习记录、学习记忆和战斗残局均只保存在当前浏览器的 `localStorage` 中，不会上传云端；账号导出文件也不包含密码。复习记录使用浏览器存储键 `lexicon-duel-review-v1`。
-
-按模式保存的残局使用浏览器存储键 `lexicon-duel-battles-v2`，目前支持学习、练习和联机三个独立存档槽位。清理浏览器网站数据会删除这些记录；词库 JSON 文件不会受到影响。
-
-学习模式的独立记忆使用 `lexicon-duel-learning-v1`。学习卡组按 60 张一组生成，每组拆成 10 个 6 张小组；普通卡组优先使用 L1/L2 高频侧和 L3 中频词，未纳入普通组的卡片进入低频卡组，月份、国家/国籍和天气主题卡组可以与普通卡组重叠。学习记忆按“卡组 + 词卡”保存，因此同一张词卡出现在不同卡组时可以分别完成。练习模式的答题记录和抽牌概率不会与学习模式互相影响。
+- 账号注册表、复习记录、学习记忆、记忆档案和战斗残局均只保存在当前浏览器的 `localStorage`，不会上传云端；账号导出文件不包含密码。
+- 存储键：账号注册表 `lexicon-duel-accounts-v1`；分账号数据 `lexicon-duel-account-v1:<用户>:review|learning|battles|records`（旧键 `lexicon-duel-review-v1`、`lexicon-duel-learning-v1`、`lexicon-duel-battles-v2`）。
+- 学习记忆按"卡组 + 词卡"保存，同一词卡出现在不同卡组时可分别完成；练习模式的答题记录与抽牌概率不影响学习模式。
+- 清理浏览器网站数据会删除以上记录，词库 JSON 文件不受影响。
 
 ## 当前开放内容
 
-目前开放“学习”和“练习”模式：学习模式从卡组选择页进入，按所选卡组记录答题进度并支持独立残局；练习模式从全部有效 CET-6 词卡中随机抽取。联机模式保留入口，目前暂未开放。
+已开放：**学习**（卡组战役）、**练习**（全词库 + 复习混入）、**错题本**（到期复习与错题练习）。**联机**模式保留入口，暂未开放。
