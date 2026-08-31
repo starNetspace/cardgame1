@@ -269,11 +269,18 @@ export function drawTurnCards(state: BattleState, cards: import('../shared/domai
   const overflow = overflowCards.length
   const needsSpelling = !next.hand.some((item) => item.face === 'spelling')
   next.hand = [...next.hand, ...makeRuntimeCards(accepted, Math.random, needsSpelling)]
-  next.player.hp = Math.max(0, next.player.hp - overflow * FULL_HAND_DAMAGE)
   if (overflow > 0) {
     // Overflow cards return to the draw pile so they are never lost from a learning run.
     next.drawPile = [...next.drawPile, ...overflowCards]
-    next.log = [`手牌已满，${overflow} 张抽到的牌放回牌库，受到 ${overflow * FULL_HAND_DAMAGE} 点真实伤害。`, ...next.log].slice(0, 8)
+  }
+  // Ending a turn with a full hand always pays the full overflow penalty, even
+  // when the draw pile is empty and no cards could be drawn.
+  const penaltyCount = availableSlots === 0 ? Math.max(overflow, TURN_DRAW) : overflow
+  if (penaltyCount > 0) {
+    next.player.hp = Math.max(0, next.player.hp - penaltyCount * FULL_HAND_DAMAGE)
+    next.log = overflow > 0
+      ? [`手牌已满，${overflow} 张抽到的牌放回牌库，受到 ${penaltyCount * FULL_HAND_DAMAGE} 点真实伤害。`, ...next.log].slice(0, 8)
+      : [`手牌已满，结束回合受到 ${penaltyCount * FULL_HAND_DAMAGE} 点真实伤害。`, ...next.log].slice(0, 8)
   }
   if (next.player.hp <= 0) next.status = 'defeat'
   return { state: next, overflow }
@@ -418,6 +425,8 @@ export function finishEnemyTurn(state: BattleState): BattleState {
   if (next.player.hp <= 0) next.status = 'defeat'
   return next
 }
+
+
 
 
 

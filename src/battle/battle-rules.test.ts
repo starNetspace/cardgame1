@@ -251,7 +251,7 @@ describe('battle rules', () => {
     expect(result.state.hand).toHaveLength(8)
     expect(result.state.discardCount).toBe(0)
     expect(result.state.drawPile).toEqual([cards[0], cards[1], cards[2]])
-    expect(result.state.player.hp).toBe(24)
+    expect(result.state.player.hp).toBe(20)
     expect(result.state.player.shield).toBe(7)
   })
 
@@ -417,7 +417,15 @@ describe('battle rules', () => {
     expect(result.state.hand).toHaveLength(8)
     expect(result.state.drawPile.map((card) => card.cardId)).toEqual(['b', 'c'])
   })
+  it('applies the full-hand penalty even when the draw pile is empty', () => {
+    const battle = createBattle([], Array.from({ length: 8 }, (_, index) => runtime(cards[index % cards.length], 'meaning')))
+    const result = drawTurnCards(battle, [])
+    expect(result.overflow).toBe(0)
+    expect(result.state.player.hp).toBe(20)
+    expect(result.state.drawPile).toHaveLength(0)
+  })
 })
+
 
 
 
