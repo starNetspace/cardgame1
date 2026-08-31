@@ -464,6 +464,8 @@ export default function App() {
     const card = question.card
     const source: CardMemoryAnswerSource = cardMeta[card.card.cardId]?.source === 'requeue' ? 'requeue' : 'due'
     let next = structuredClone(battle) as BattleState
+    const wrongPenalty = next.character.abilities.filter((ability) => ability.type === 'passive-wrong-penalty').reduce((sum, ability) => sum + ability.amount, 0)
+    const wrongDamage = WRONG_DAMAGE + wrongPenalty
     next.totalAnswers += 1
     next.usedCards += 1
     const isPass = next.player.energy <= 0
@@ -477,15 +479,16 @@ export default function App() {
       if (isPass) {
         next.log = [`${card.card.word} · 过牌答对，效果不生效`, ...next.log].slice(0, 8)
       } else {
+        next.turnCorrectEffectiveCards = (next.turnCorrectEffectiveCards ?? 0) + 1
         const effect = applyCardEffect(next, card)
         next = effect.state
         next = protectLearningBattle(next)
-        next.log = [`${effectLabel(card.card.effectType)}：${effect.summary}`, ...next.log].slice(0, 8)
+        next.log = [`${effectLabel(next.player.cardsAsAttackUntilEndTurn ? 'attack' : card.card.effectType)}：${effect.summary}`, ...next.log].slice(0, 8)
       }
     } else {
-      next.player.hp = Math.max(0, next.player.hp - WRONG_DAMAGE)
+      next.player.hp = Math.max(0, next.player.hp - wrongDamage)
       next.errorCardIds = [...new Set([...next.errorCardIds, card.card.cardId])]
-      next.log = [`${abandoned ? '跳过拼写题' : '答题错误'}，受到 ${WRONG_DAMAGE} 点直接伤害。`, ...next.log].slice(0, 8)
+      next.log = [`${abandoned ? '跳过拼写题' : '答题错误'}，受到 ${wrongDamage} 点直接伤害。`, ...next.log].slice(0, 8)
       next = returnLearningCardToQueue(next, card)
     }
     if (next.player.hp <= 0) next.status = 'defeat'
@@ -550,7 +553,7 @@ export default function App() {
     setBattle(next)
     setFeedback(correct
       ? { correct: true, text: source === 'requeue' ? '这次记住了，今晚再见。' : isPass ? '过牌答对，本题只计入复习记录，卡牌效果不生效。' : `${effectLabel(card.card.effectType)}牌生效：${effectDescription(card)}` }
-      : { correct: false, abandoned, text: `${abandoned ? '已跳过本题。' : '回答错误。'} 正确答案：${card.card.word}。你受到 ${WRONG_DAMAGE} 点直接伤害。` })
+      : { correct: false, abandoned, text: `${abandoned ? '已跳过本题。' : '回答错误。'} 正确答案：${card.card.word}。你受到 ${wrongDamage} 点直接伤害。` })
   }
 
   function submitAnswer() {

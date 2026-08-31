@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { cleanCardRecords, drawCards, makeRuntimeCards } from '../library/card-library'
 import { buildMeaningQuestion, isSpellingCorrect } from './question-engine'
-import { addPlayerShield, advanceCampaignEnemy, applyCardEffect, canCompleteLearningDeck, createBattle, drawTurnCards, enemyAttack, finishEnemyTurn, markLearningCardCorrect, protectLearningBattle, returnLearningCardToQueue, useCharacterAbility } from './battle-rules'
+import { addPlayerShield, advanceCampaignEnemy, applyCardEffect, canCompleteLearningDeck, createBattle, dealDamageToEnemy, drawTurnCards, effectDescription, enemyAttack, finishEnemyTurn, markLearningCardCorrect, protectLearningBattle, returnLearningCardToQueue, TURN_ENERGY, useCharacterAbility } from './battle-rules'
 import type { CharacterDefinition, EnemyDefinition, RuntimeCard } from '../shared/domain-types'
 
 const cards = cleanCardRecords([
@@ -70,6 +70,30 @@ describe('battle rules', () => {
     expect(attacked.enemy.hp).toBe(36)
     attacked.player.hp -= 2
     expect(attacked.player.hp).toBe(28)
+  })
+
+  it('adds a 25% rounded-up bonus to spelling card effects', () => {
+    const battle = createBattle([], [])
+    expect(applyCardEffect(battle, runtime(cards[0], 'spelling')).state.enemy.hp).toBe(35)
+    expect(applyCardEffect(battle, runtime(cards[1], 'spelling')).state.player.shield).toBe(8)
+
+    const boosted = applyCardEffect(battle, runtime(cards[2], 'spelling')).state
+    expect(boosted.boost).toBe(4)
+    expect(applyCardEffect(boosted, runtime(cards[0])).state.enemy.hp).toBe(32)
+
+    const drawBattle = createBattle([...cards], [])
+    expect(applyCardEffect(drawBattle, runtime(cards[3], 'spelling')).state.hand).toHaveLength(4)
+
+    const healBattle = createBattle([], [])
+    healBattle.player.hp = 10
+    expect(applyCardEffect(healBattle, runtime(cards[4], 'spelling')).state.player.hp).toBe(23)
+
+    expect(effectDescription(runtime(cards[0]))).toBe('造成 4 点伤害')
+    expect(effectDescription(runtime(cards[0], 'spelling'))).toBe('造成 5 点伤害')
+    expect(effectDescription(runtime(cards[1], 'spelling'))).toBe('获得 8 点护盾')
+    expect(effectDescription(runtime(cards[2], 'spelling'))).toBe('下一张攻击或护盾 +4')
+    expect(effectDescription(runtime(cards[3], 'spelling'))).toBe('额外抽 4 张牌')
+    expect(effectDescription(runtime(cards[4], 'spelling'))).toBe('回复 13 点生命')
   })
   it('creates custom enemies with shields and applies registered abilities', () => {
     const enemy: EnemyDefinition = { id: 'warden', name: 'WARDEN', subtitle: '守卫', icon: 'shield', maxHp: 18, attack: 3, shield: 4, abilities: [{ type: 'fixed-shield-per-turn', amount: 2, description: '每回合获得 2 点护盾' }] }
@@ -221,11 +245,13 @@ describe('battle rules', () => {
 
   it('keeps drawing after a full hand and damages the player for overflow', () => {
     const battle = createBattle([], Array.from({ length: 8 }, (_, index) => runtime(cards[index % cards.length], 'meaning')))
+    battle.player.shield = 7
     const result = drawTurnCards(battle, [cards[0], cards[1], cards[2]])
     expect(result.overflow).toBe(3)
     expect(result.state.hand).toHaveLength(8)
     expect(result.state.discardCount).toBe(3)
-    expect(result.state.player.hp).toBe(27)
+    expect(result.state.player.hp).toBe(24)
+    expect(result.state.player.shield).toBe(7)
   })
 
   it('turns overflow damage into defeat when the last health is lost', () => {
@@ -283,5 +309,87 @@ describe('battle rules', () => {
     expect(first.player).toMatchObject({ shield: 0, hp: 25 })
     const second = finishEnemyTurn(first)
     expect(enemyAttack(second)).toBe(8)
+  })
+
+  it('supports the optimized character ability effects', () => {
+    const ema: CharacterDefinition = { id: 'ema', name: 'EMA', subtitle: '艾玛', maxHp: 24, shield: 0, abilities: [{ id: 'clear', kind: 'active', type: 'active-clear-shield-convert', amount: 1, cooldown: 3, description: '清盾并转攻击' }] }
+    const emaBattle = createBattle([], [], 'practice', undefined, ema)
+    emaBattle.enemy.shield = 6
+    const emaNext = useCharacterAbility(emaBattle, 'clear')!.state
+    expect(emaNext.enemy.shield).toBe(0)
+    expect(emaNext.player.cardsAsAttackUntilEndTurn).toBe(true)
+    expect(applyCardEffect(emaNext, runtime(cards[1])).state.enemy.hp).toBe(35)
+
+    const anan: CharacterDefinition = { id: 'anan', name: 'ANAN', subtitle: '安安', maxHp: 24, shield: 0, abilities: [{ id: 'immune', kind: 'active', type: 'active-immunity-reflect', amount: 1, cooldown: 3, description: '免疫反伤' }] }
+    const ananBattle = createBattle([], [], 'practice', undefined, anan)
+    const ananNext = finishEnemyTurn(useCharacterAbility(ananBattle, 'immune')!.state)
+    expect(ananNext.player.hp).toBe(24)
+    expect(ananNext.enemy.hp).toBe(36)
+
+    const meruru: CharacterDefinition = { id: 'meruru', name: 'MERURU', subtitle: '梅露露', maxHp: 30, shield: 0, abilities: [{ id: 'syphon', kind: 'active', type: 'active-heal-current-hp-damage', amount: 5, cooldown: 5, description: '回复并造成当前生命伤害' }] }
+    const meruruBattle = createBattle([], [], 'practice', undefined, meruru)
+    meruruBattle.player.hp = 20
+    const meruruNext = useCharacterAbility(meruruBattle, 'syphon')!.state
+    expect(meruruNext.player.hp).toBe(25)
+    expect(meruruNext.enemy.hp).toBe(15)
+
+    const nanoka: CharacterDefinition = { id: 'nanoka', name: 'NANOKA', subtitle: '奈叶香', maxHp: 27, shield: 0, abilities: [{ id: 'echo', kind: 'active', type: 'active-repeat-last-turn-damage', amount: 0, cooldown: 3, description: '重复伤害' }] }
+    const nanokaBattle = createBattle([], [], 'practice', undefined, nanoka)
+    nanokaBattle.lastTurnDamageDealt = 12
+    expect(useCharacterAbility(nanokaBattle, 'echo')!.state.enemy.hp).toBe(28)
+
+    const margo: CharacterDefinition = { id: 'margo', name: 'MARGO', subtitle: '玛格', maxHp: 26, shield: 0, abilities: [{ id: 'double', kind: 'active', type: 'active-double-next-card', amount: 2, cooldown: 3, description: '下一张翻倍' }] }
+    const margoBattle = createBattle([], [], 'practice', undefined, margo)
+    const margoNext = applyCardEffect(useCharacterAbility(margoBattle, 'double')!.state, runtime(cards[0])).state
+    expect(margoNext.enemy.hp).toBe(32)
+
+    const miria: CharacterDefinition = { id: 'miria', name: 'MIRIA', subtitle: '米莉亚', maxHp: 30, shield: 0, abilities: [{ id: 'swap', kind: 'active', type: 'active-swap-health-shield', amount: 0, cooldown: 3, description: '交换' }] }
+    const miriaBattle = createBattle([], [], 'practice', undefined, miria)
+    miriaBattle.player.hp = 20
+    miriaBattle.player.shield = 7
+    miriaBattle.enemy.hp = 40
+    miriaBattle.enemy.shield = 2
+    const miriaNext = useCharacterAbility(miriaBattle, 'swap')!.state
+    expect(miriaNext.player).toMatchObject({ hp: 30, shield: 2 })
+    expect(miriaNext.enemy).toMatchObject({ hp: 20, shield: 7 })
+
+    const alisa: CharacterDefinition = { id: 'alisa', name: 'ALISA', subtitle: '亚里沙', maxHp: 26, shield: 0, abilities: [{ id: 'surge', kind: 'active', type: 'active-turn-card-bonus', amount: 2, cooldown: 3, description: '本回合加值' }] }
+    const alisaBattle = createBattle([], [], 'practice', undefined, alisa)
+    expect(applyCardEffect(useCharacterAbility(alisaBattle, 'surge')!.state, runtime(cards[0])).state.enemy.hp).toBe(34)
+
+    const coco: CharacterDefinition = { id: 'coco', name: 'COCO', subtitle: '可可', maxHp: 26, shield: 0, abilities: [{ id: 'tempo', kind: 'active', type: 'active-gain-energy', amount: 2, cooldown: 3, description: '行动力恢复' }] }
+    const cocoBattle = createBattle([], [], 'practice', undefined, coco)
+    cocoBattle.player.energy = 0
+    cocoBattle.lastTurnCorrectEffectiveCards = 2
+    expect(useCharacterAbility(cocoBattle, 'tempo')!.state.player.energy).toBe(2)
+
+    const hanna: CharacterDefinition = { id: 'hanna', name: 'HANNA', subtitle: '汉娜', maxHp: 34, shield: 2, abilities: [{ id: 'ward', kind: 'passive', type: 'passive-shield-per-turn', amount: 2, description: '每回合护盾' }] }
+    const hannaBattle = createBattle([], [], 'practice', undefined, hanna)
+    hannaBattle.player.shield = 0
+    expect(finishEnemyTurn(hannaBattle).player.shield).toBe(2)
+  })
+
+  it('supports enemy shield-ignore, revive-once, and instant-kill', () => {
+    const shieldIgnoreEnemy: EnemyDefinition = { id: 'hanoka', name: 'HANOKA', subtitle: '穗乃香', maxHp: 40, attack: 4, shield: 0, abilities: [{ type: 'shield-ignore', amount: 1, cooldown: 2, description: '无视护盾' }] }
+    const shieldIgnoreBattle = createBattle([], [], 'practice', shieldIgnoreEnemy)
+    shieldIgnoreBattle.player.shield = 10
+    const ignored = finishEnemyTurn(shieldIgnoreBattle)
+    expect(ignored.player.hp).toBe(26)
+    expect(ignored.enemy.abilityCooldowns?.['shield-ignore']).toBe(2)
+
+    const reviveEnemy: EnemyDefinition = { id: 'hiro', name: 'HIRO', subtitle: '二阶堂', maxHp: 30, attack: 4, shield: 0, abilities: [{ type: 'revive-once', amount: 50, cooldown: 10, description: '复活' }] }
+    const reviveBattle = createBattle([], [], 'practice', reviveEnemy)
+    dealDamageToEnemy(reviveBattle, 30)
+    expect(reviveBattle.enemy.hp).toBe(15)
+    expect(reviveBattle.enemy.reviveUsed).toBe(true)
+    dealDamageToEnemy(reviveBattle, 15)
+    expect(reviveBattle.enemy.hp).toBe(0)
+
+    const instantKillEnemy: EnemyDefinition = { id: 'yuki', name: 'YUKI', subtitle: '雪', maxHp: 30, attack: 4, shield: 0, abilities: [{ type: 'instant-kill-at-turn', amount: 0, turnLimit: 2, description: '第 2 回合击杀' }] }
+    const instantKillBattle = createBattle([], [], 'practice', instantKillEnemy)
+    expect(finishEnemyTurn(instantKillBattle).status).toBe('playing')
+    const killed = finishEnemyTurn(finishEnemyTurn(instantKillBattle))
+    expect(killed.status).toBe('defeat')
+    expect(killed.player.hp).toBe(0)
   })
 })

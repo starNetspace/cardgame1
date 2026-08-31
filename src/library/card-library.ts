@@ -130,10 +130,15 @@ export function isEnemyDefinition(value: unknown): value is EnemyDefinition {
   return enemy.abilities.every((ability) => {
     if (!ability || typeof ability !== 'object') return false
     const item = ability as Record<string, unknown>
-    if (!['fixed-shield-per-turn', 'attack-scaling', 'start-shield', 'heal-per-turn', 'enrage', 'direct-damage-per-turn', 'shield-breaker'].includes(item.type as string) || !Number.isInteger(item.amount) || (item.amount as number) < 0 || typeof item.description !== 'string' || item.description.trim().length === 0) return false
+    if (!['fixed-shield-per-turn', 'attack-scaling', 'start-shield', 'heal-per-turn', 'enrage', 'direct-damage-per-turn', 'shield-breaker', 'shield-ignore', 'revive-once', 'instant-kill-at-turn'].includes(item.type as string) || !Number.isInteger(item.amount) || (item.amount as number) < 0 || typeof item.description !== 'string' || item.description.trim().length === 0) return false
     if (item.type === 'attack-scaling' && (!Number.isInteger(item.everyTurns) || (item.everyTurns as number) <= 0)) return false
     if (item.type === 'enrage' && (typeof item.threshold !== 'number' || item.threshold <= 0 || item.threshold >= 1)) return false
     if (item.threshold !== undefined && (typeof item.threshold !== 'number' || item.threshold <= 0 || item.threshold >= 1)) return false
+    if (item.type === 'shield-ignore' && (!Number.isInteger(item.cooldown) || (item.cooldown as number) <= 0)) return false
+    if (item.type === 'revive-once' && (!Number.isInteger(item.amount) || (item.amount as number) <= 0 || (item.amount as number) > 100)) return false
+    if (item.type === 'instant-kill-at-turn' && (!Number.isInteger(item.turnLimit) || (item.turnLimit as number) <= 0)) return false
+    if (item.cooldown !== undefined && (!Number.isInteger(item.cooldown) || (item.cooldown as number) <= 0)) return false
+    if (item.turnLimit !== undefined && (!Number.isInteger(item.turnLimit) || (item.turnLimit as number) <= 0)) return false
     return item.everyTurns === undefined || (Number.isInteger(item.everyTurns) && (item.everyTurns as number) > 0)
   })
 }
@@ -172,14 +177,14 @@ function isAvatarPath(value: unknown): value is string {
 export function isCharacterAbility(value: unknown): value is CharacterAbility {
   if (!value || typeof value !== 'object') return false
   const ability = value as Record<string, unknown>
-  const passiveTypes = ['passive-start-shield', 'passive-max-hp', 'passive-heal-per-turn', 'passive-card-bonus']
-  const activeTypes = ['active-heal', 'active-shield', 'active-damage']
+  const passiveTypes = ['passive-start-shield', 'passive-max-hp', 'passive-heal-per-turn', 'passive-shield-per-turn', 'passive-card-bonus', 'passive-wrong-penalty']
+  const activeTypes = ['active-heal', 'active-shield', 'active-damage', 'active-clear-shield-convert', 'active-immunity-reflect', 'active-heal-current-hp-damage', 'active-repeat-last-turn-damage', 'active-double-next-card', 'active-swap-health-shield', 'active-turn-card-bonus', 'active-gain-energy']
   if (typeof ability.id !== 'string' || ability.id.trim().length === 0) return false
   if (!['passive', 'active'].includes(ability.kind as string)) return false
   if (![...passiveTypes, ...activeTypes].includes(ability.type as string)) return false
   if (ability.kind === 'passive' && !passiveTypes.includes(ability.type as string)) return false
   if (ability.kind === 'active' && !activeTypes.includes(ability.type as string)) return false
-  if (!Number.isInteger(ability.amount) || (ability.amount as number) <= 0) return false
+  if (!Number.isInteger(ability.amount) || (ability.amount as number) < 0) return false
   if (ability.kind === 'active' && (!Number.isInteger(ability.cooldown) || (ability.cooldown as number) <= 0)) return false
   if (ability.cooldown !== undefined && (!Number.isInteger(ability.cooldown) || (ability.cooldown as number) <= 0)) return false
   return typeof ability.description === 'string' && ability.description.trim().length > 0

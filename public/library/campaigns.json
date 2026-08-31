@@ -1,29 +1,17 @@
 {
-  "version": 2,
+  "version": 3,
   "practice": {
     "sets": [
       {
-        "id": "forgotten-ruins",
-        "title": "遗忘遗迹",
-        "description": "5 名敌人依次出现，敌人强度随战斗推进，预计使用约 150 张牌完成。",
+        "id": "standard-enemy-group",
+        "title": "标准敌人组",
+        "description": "5 名敌人依次出现，学习、练习和错题模式共用。",
         "enemies": [
-          { "id": "ruin-scout", "name": "RUIN SCOUT", "subtitle": "遗迹斥候", "avatar": "yuki.png", "maxHp": 30, "attack": 3, "shield": 0, "abilities": [] },
-          { "id": "ash-warden", "name": "ASH WARDEN", "subtitle": "灰烬守卫", "avatar": "Pin_Margo.png", "maxHp": 40, "attack": 4, "shield": 0, "abilities": [{ "type": "fixed-shield-per-turn", "amount": 2, "description": "每回合获得 2 点护盾" }] },
-          { "id": "memory-leech", "name": "MEMORY LEECH", "subtitle": "记忆汲取者", "avatar": "Pin_Meruru.png", "maxHp": 48, "attack": 5, "shield": 0, "abilities": [{ "type": "direct-damage-per-turn", "amount": 1, "description": "每回合攻击后额外造成 1 点生命伤害" }] },
-          { "id": "iron-shell", "name": "IRON SHELL", "subtitle": "铁甲壳", "avatar": "Pin_Nanoka.png", "maxHp": 56, "attack": 6, "shield": 4, "abilities": [{ "type": "fixed-shield-per-turn", "amount": 2, "description": "每回合获得 2 点护盾" }, { "type": "shield-breaker", "amount": 2, "description": "有护盾时攻击额外穿透 2 点生命" }] },
-          { "id": "the-forgetter", "name": "THE FORGETTER", "subtitle": "遗忘者", "avatar": "Pin_Sherry.png", "maxHp": 66, "attack": 8, "shield": 0, "isFinal": true, "abilities": [{ "type": "attack-scaling", "amount": 1, "everyTurns": 3, "description": "每三回合攻击力增加 1" }, { "type": "enrage", "amount": 3, "threshold": 0.5, "description": "生命低于 50% 后攻击力增加 3" }] }
-        ]
-      },
-      {
-        "id": "iron-circuit",
-        "title": "钢铁回路",
-        "description": "包含护盾、回复、成长和穿透机制的进阶 5 敌人路线。",
-        "enemies": [
-          { "id": "voltage-beast", "name": "VOLTAGE BEAST", "subtitle": "电压兽", "avatar": "yuki.png", "maxHp": 34, "attack": 4, "shield": 0, "abilities": [{ "type": "start-shield", "amount": 2, "description": "战斗开始时获得 2 点护盾" }, { "type": "attack-scaling", "amount": 1, "everyTurns": 3, "description": "每三回合攻击力增加 1" }] },
-          { "id": "recall-flame", "name": "RECALL FLAME", "subtitle": "回忆之火", "avatar": "Pin_AnAn.png", "maxHp": 42, "attack": 5, "shield": 0, "abilities": [{ "type": "direct-damage-per-turn", "amount": 1, "description": "每回合攻击后额外造成 1 点生命伤害" }] },
-          { "id": "archive-warden", "name": "ARCHIVE WARDEN", "subtitle": "档案守卫", "avatar": "Pin_Coco.png", "maxHp": 50, "attack": 5, "shield": 2, "abilities": [{ "type": "fixed-shield-per-turn", "amount": 2, "description": "每回合获得 2 点护盾" }, { "type": "heal-per-turn", "amount": 2, "description": "每回合回复 2 点生命" }] },
-          { "id": "null-eye", "name": "NULL EYE", "subtitle": "空白之眼", "avatar": "Pin_Leia.png", "maxHp": 58, "attack": 6, "shield": 0, "abilities": [{ "type": "shield-breaker", "amount": 2, "description": "有护盾时攻击额外穿透 2 点生命" }, { "type": "attack-scaling", "amount": 1, "everyTurns": 3, "description": "每三回合攻击力增加 1" }] },
-          { "id": "circuit-king", "name": "CIRCUIT KING", "subtitle": "回路之王", "avatar": "Pin_Ema.png", "maxHp": 70, "attack": 8, "shield": 2, "isFinal": true, "abilities": [{ "type": "fixed-shield-per-turn", "amount": 2, "description": "每回合获得 2 点护盾" }, { "type": "enrage", "amount": 3, "threshold": 0.5, "description": "生命低于 50% 后攻击力增加 3" }] }
+          { "id": "warden", "name": "WARDEN", "subtitle": "典狱长", "avatar": "Warden.png", "maxHp": 38, "attack": 4, "shield": 0, "abilities": [] },
+          { "id": "jailer", "name": "JAILER", "subtitle": "学姐", "avatar": "Jailer.png", "maxHp": 50, "attack": 5, "shield": 0, "abilities": [{ "type": "attack-scaling", "amount": 1, "everyTurns": 3, "description": "每 3 回合攻击力 +1" }] },
+          { "id": "hanoka", "name": "HANOKA", "subtitle": "穗乃香", "avatar": "Hanoka.png", "maxHp": 55, "attack": 6, "shield": 2, "abilities": [{ "type": "shield-ignore", "amount": 1, "cooldown": 2, "description": "攻击无视护盾，冷却 2 回合" }] },
+          { "id": "hiro", "name": "HIRO", "subtitle": "二阶堂", "avatar": "Hiro.png", "maxHp": 63, "attack": 7, "shield": 0, "abilities": [{ "type": "revive-once", "amount": 50, "cooldown": 10, "description": "首次死亡时以 50% 最大生命复活一次" }] },
+          { "id": "yuki", "name": "YUKI", "subtitle": "雪", "avatar": "Yuki.png", "maxHp": 76, "attack": 8, "shield": 2, "isFinal": true, "abilities": [{ "type": "fixed-shield-per-turn", "amount": 3, "description": "每回合获得 3 点护盾" }, { "type": "instant-kill-at-turn", "amount": 0, "turnLimit": 15, "description": "第 15 回合直接击杀玩家" }] }
         ]
       }
     ]
@@ -31,15 +19,15 @@
   "learning": {
     "sets": [
       {
-        "id": "learning-gauntlet",
-        "title": "记忆试炼",
-        "description": "敌人会循环出现，直到当前学习卡组的词全部掌握。",
+        "id": "standard-enemy-group",
+        "title": "标准敌人组",
+        "description": "5 名敌人依次出现，学习、练习和错题模式共用。",
         "enemies": [
-          { "id": "memory-watcher", "name": "MEMORY WATCHER", "subtitle": "记忆守望者", "avatar": "Pin_Miria.png", "maxHp": 30, "attack": 3, "shield": 0, "abilities": [] },
-          { "id": "recall-flame", "name": "RECALL FLAME", "subtitle": "回忆之火", "avatar": "Pin_AnAn.png", "maxHp": 40, "attack": 4, "shield": 0, "abilities": [{ "type": "fixed-shield-per-turn", "amount": 2, "description": "每回合获得 2 点护盾" }] },
-          { "id": "archive-warden", "name": "ARCHIVE WARDEN", "subtitle": "档案守卫", "avatar": "Pin_Coco.png", "maxHp": 48, "attack": 5, "shield": 0, "abilities": [{ "type": "heal-per-turn", "amount": 1, "description": "每回合回复 1 点生命" }] },
-          { "id": "null-eye", "name": "NULL EYE", "subtitle": "空白之眼", "avatar": "Pin_Leia.png", "maxHp": 56, "attack": 6, "shield": 2, "abilities": [{ "type": "shield-breaker", "amount": 1, "description": "有护盾时攻击额外穿透 1 点生命" }] },
-          { "id": "recall-king", "name": "RECALL KING", "subtitle": "回忆之王", "avatar": "Pin_Ema.png", "maxHp": 66, "attack": 8, "shield": 0, "isFinal": true, "abilities": [{ "type": "attack-scaling", "amount": 1, "everyTurns": 3, "description": "每三回合攻击力增加 1" }] }
+          { "id": "warden", "name": "WARDEN", "subtitle": "典狱长", "avatar": "Warden.png", "maxHp": 38, "attack": 4, "shield": 0, "abilities": [] },
+          { "id": "jailer", "name": "JAILER", "subtitle": "学姐", "avatar": "Jailer.png", "maxHp": 50, "attack": 5, "shield": 0, "abilities": [{ "type": "attack-scaling", "amount": 1, "everyTurns": 3, "description": "每 3 回合攻击力 +1" }] },
+          { "id": "hanoka", "name": "HANOKA", "subtitle": "穗乃香", "avatar": "Hanoka.png", "maxHp": 55, "attack": 6, "shield": 2, "abilities": [{ "type": "shield-ignore", "amount": 1, "cooldown": 2, "description": "攻击无视护盾，冷却 2 回合" }] },
+          { "id": "hiro", "name": "HIRO", "subtitle": "二阶堂", "avatar": "Hiro.png", "maxHp": 63, "attack": 7, "shield": 0, "abilities": [{ "type": "revive-once", "amount": 50, "cooldown": 10, "description": "首次死亡时以 50% 最大生命复活一次" }] },
+          { "id": "yuki", "name": "YUKI", "subtitle": "雪", "avatar": "Yuki.png", "maxHp": 76, "attack": 8, "shield": 2, "isFinal": true, "abilities": [{ "type": "fixed-shield-per-turn", "amount": 3, "description": "每回合获得 3 点护盾" }, { "type": "instant-kill-at-turn", "amount": 0, "turnLimit": 15, "description": "第 15 回合直接击杀玩家" }] }
         ]
       }
     ]

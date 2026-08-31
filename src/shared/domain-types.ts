@@ -4,9 +4,9 @@ export type EffectType = 'attack' | 'shield' | 'boost' | 'draw' | 'heal'
 export type BattleMode = 'learning' | 'practice' | 'online'
 export type StudyDeckCategory = 'standard' | 'low-frequency' | 'topic'
 export type EnemyIcon = 'skull' | 'flame' | 'eye' | 'crown' | 'zap' | 'shield'
-export type EnemyAbilityType = 'fixed-shield-per-turn' | 'attack-scaling' | 'start-shield' | 'heal-per-turn' | 'enrage' | 'direct-damage-per-turn' | 'shield-breaker'
+export type EnemyAbilityType = 'fixed-shield-per-turn' | 'attack-scaling' | 'start-shield' | 'heal-per-turn' | 'enrage' | 'direct-damage-per-turn' | 'shield-breaker' | 'shield-ignore' | 'revive-once' | 'instant-kill-at-turn'
 export type CharacterAbilityKind = 'passive' | 'active'
-export type CharacterAbilityType = 'passive-start-shield' | 'passive-max-hp' | 'passive-heal-per-turn' | 'passive-card-bonus' | 'active-heal' | 'active-shield' | 'active-damage'
+export type CharacterAbilityType = 'passive-start-shield' | 'passive-max-hp' | 'passive-heal-per-turn' | 'passive-shield-per-turn' | 'passive-card-bonus' | 'passive-wrong-penalty' | 'active-heal' | 'active-shield' | 'active-damage' | 'active-clear-shield-convert' | 'active-immunity-reflect' | 'active-heal-current-hp-damage' | 'active-repeat-last-turn-damage' | 'active-double-next-card' | 'active-swap-health-shield' | 'active-turn-card-bonus' | 'active-gain-energy'
 export type CampaignRoute = 'set' | 'all'
 
 export interface EnemyAbility {
@@ -14,6 +14,8 @@ export interface EnemyAbility {
   amount: number
   everyTurns?: number
   threshold?: number
+  cooldown?: number
+  turnLimit?: number
   description: string
 }
 
@@ -215,6 +217,8 @@ export interface EnemyState {
   attack: number
   turns: number
   abilities: EnemyAbility[]
+  abilityCooldowns?: Record<string, number>
+  reviveUsed?: boolean
 }
 
 export interface PlayerState {
@@ -222,6 +226,11 @@ export interface PlayerState {
   hp: number
   shield: number
   energy: number
+  immuneThisTurn?: boolean
+  reflectThisTurn?: boolean
+  nextCardDoubled?: boolean
+  turnCardBonus?: number
+  cardsAsAttackUntilEndTurn?: boolean
 }
 
 export interface CharacterState extends CharacterDefinition {
@@ -245,6 +254,10 @@ export interface BattleState {
   faceStats: { meaning: { correct: number; total: number }; spelling: { correct: number; total: number } }
   errorCardIds: string[]
   log: string[]
+  turnDamageDealt?: number
+  lastTurnDamageDealt?: number
+  turnCorrectEffectiveCards?: number
+  lastTurnCorrectEffectiveCards?: number
   learningDeckId?: string
   learningCardIds?: string[]
   learningRemainingCardIds?: string[]

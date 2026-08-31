@@ -6,7 +6,8 @@ export const MAX_SHIELD = 10
 export const TURN_DRAW = 5
 export const TURN_ENERGY = 3
 export const WRONG_DAMAGE = 2
-export const FULL_HAND_DAMAGE = 1
+export const FULL_HAND_DAMAGE = 2
+export const SPELLING_BONUS_MULTIPLIER = 1.25
 
 const DEFAULT_ENEMY: EnemyDefinition = {
   id: 'default-forgetter', name: 'THE FORGETTER', subtitle: '遗忘者', icon: 'skull', maxHp: 40, attack: 4,
@@ -23,14 +24,18 @@ export function effectLabel(type: EffectType): string {
   return { attack: '攻击', shield: '护盾', boost: '强化', draw: '抽牌', heal: '回复' }[type]
 }
 
+function spellingBonus(face: RuntimeCard['face'], value: number): number {
+  return face === 'spelling' ? Math.ceil(value * SPELLING_BONUS_MULTIPLIER) : value
+}
+
 export function effectDescription(card: RuntimeCard): string {
   const level = card.card.frequencyLevel
   switch (card.card.effectType) {
-    case 'attack': return `造成 ${2 + level} 点伤害`
-    case 'shield': return `获得 ${3 + level} 点护盾`
-    case 'boost': return `下一张攻击或护盾 +${2 + level}`
-    case 'draw': return `额外抽 ${1 + Math.floor(level / 2)} 张牌`
-    case 'heal': return `回复 ${5 + level} 点生命`
+    case 'attack': return `造成 ${spellingBonus(card.face, 2 + level)} 点伤害`
+    case 'shield': return `获得 ${spellingBonus(card.face, 3 + level)} 点护盾`
+    case 'boost': return `下一张攻击或护盾 +${spellingBonus(card.face, 2 + level)}`
+    case 'draw': return `额外抽 ${spellingBonus(card.face, 1 + Math.floor(level / 2))} 张牌`
+    case 'heal': return `回复 ${spellingBonus(card.face, 5 + level)} 点生命`
   }
 }
 
@@ -48,7 +53,7 @@ function enemyState(definition: EnemyDefinition) {
   const startShield = (definition.shield ?? 0) + definition.abilities
     .filter((ability) => ability.type === 'start-shield')
     .reduce((sum, ability) => sum + ability.amount, 0)
-  return { ...definition, hp: definition.maxHp, shield: Math.min(MAX_SHIELD, startShield), turns: 0 }
+  return { ...definition, hp: definition.maxHp, shield: Math.min(MAX_SHIELD, startShield), turns: 0, abilityCooldowns: {}, reviveUsed: false }
 }
 
 export function characterMaxHp(definition: CharacterDefinition): number {
@@ -68,7 +73,7 @@ export function createBattle(drawPile: import('../shared/domain-types').CardReco
   return {
     mode,
     character: playerCharacter,
-    player: { maxHp: characterMaxHp(character), hp: characterMaxHp(character), shield: characterStartShield(character), energy: TURN_ENERGY },
+    player: { maxHp: characterMaxHp(character), hp: characterMaxHp(character), shield: characterStartShield(character), energy: TURN_ENERGY, immuneThisTurn: false, reflectThisTurn: false, nextCardDoubled: false, turnCardBonus: 0, cardsAsAttackUntilEndTurn: false },
     enemy: enemyState(definition),
     hand,
     drawPile,
@@ -82,6 +87,10 @@ export function createBattle(drawPile: import('../shared/domain-types').CardReco
     faceStats: { meaning: { correct: 0, total: 0 }, spelling: { correct: 0, total: 0 } },
     errorCardIds: [],
     log: ['战斗开始。选择一张手牌完成答题。'],
+    turnDamageDealt: 0,
+    lastTurnDamageDealt: 0,
+    turnCorrectEffectiveCards: 0,
+    lastTurnCorrectEffectiveCards: 0,
   }
 }
 
@@ -112,6 +121,45 @@ export function useCharacterAbility(state: BattleState, abilityId: string): { st
   } else if (ability.type === 'active-damage') {
     const { blocked, damage } = dealDamageToEnemy(next, ability.amount)
     summary = blocked > 0 ? `角色技能：造成 ${damage} 点伤害，击破 ${blocked} 点护盾` : `角色技能：造成 ${damage} 点伤害`
+  } else if (ability.type === 'active-clear-shield-convert') {
+    next.enemy.shield = 0
+    next.player.cardsAsAttackUntilEndTurn = true
+    summary = '角色技能：敌方护盾已清空，本回合所有手牌将按同级攻击牌结算'
+  } else if (ability.type === 'active-immunity-reflect') {
+    next.player.immuneThisTurn = true
+    next.player.reflectThisTurn = true
+    summary = '角色技能：本回合免疫敌方伤害，并将原伤害全额反弹'
+  } else if (ability.type === 'active-heal-current-hp-damage') {
+    const healed = Math.min(ability.amount, next.player.maxHp - next.player.hp)
+    next.player.hp += healed
+    const { blocked, damage } = dealDamageToEnemy(next, next.player.hp)
+    summary = `角色技能：回复 ${healed} 点生命，并对敌人造成 ${damage} 点伤害${blocked > 0 ? `，击破 ${blocked} 点护盾` : ''}`
+  } else if (ability.type === 'active-repeat-last-turn-damage') {
+    const amount = next.lastTurnDamageDealt ?? 0
+    if (amount <= 0) {
+      summary = '角色技能：上一回合没有造成可重复的伤害'
+    } else {
+      const { blocked, damage } = dealDamageToEnemy(next, amount)
+      summary = blocked > 0 ? `角色技能：重复造成 ${damage} 点伤害，击破 ${blocked} 点护盾` : `角色技能：重复造成 ${damage} 点伤害`
+    }
+  } else if (ability.type === 'active-double-next-card') {
+    next.player.nextCardDoubled = true
+    summary = '角色技能：下一张有效手牌效果翻倍'
+  } else if (ability.type === 'active-swap-health-shield') {
+    const playerHp = next.player.hp
+    const playerShield = next.player.shield
+    next.player.hp = Math.min(next.player.maxHp, next.enemy.hp)
+    next.enemy.hp = Math.min(next.enemy.maxHp, playerHp)
+    next.player.shield = Math.min(MAX_SHIELD, next.enemy.shield)
+    next.enemy.shield = Math.min(MAX_SHIELD, playerShield)
+    summary = '角色技能：双方当前生命与护盾已交换'
+  } else if (ability.type === 'active-turn-card-bonus') {
+    next.player.turnCardBonus = ability.amount
+    summary = `角色技能：本回合攻击牌和护盾牌数值 +${ability.amount}`
+  } else if (ability.type === 'active-gain-energy') {
+    const gained = Math.min(ability.amount, next.lastTurnCorrectEffectiveCards ?? 0)
+    next.player.energy = Math.min(TURN_ENERGY, next.player.energy + gained)
+    summary = gained > 0 ? `角色技能：增加 ${gained} 点行动力` : '角色技能：上一回合没有可转化为行动力的有效答对牌'
   }
   next.log = [summary, ...next.log].slice(0, 8)
   return { state: next, summary }
@@ -120,19 +168,24 @@ export function useCharacterAbility(state: BattleState, abilityId: string): { st
 export function applyCardEffect(state: BattleState, card: RuntimeCard): { state: BattleState; summary: string } {
   const next = structuredClone(state) as BattleState
   const level = card.card.frequencyLevel
-  const cardBonus = next.character.abilities.filter((ability) => ability.type === 'passive-card-bonus').reduce((sum, ability) => sum + ability.amount, 0)
+  const passiveBonus = next.character.abilities.filter((ability) => ability.type === 'passive-card-bonus').reduce((sum, ability) => sum + ability.amount, 0)
+  const turnBonus = next.player.turnCardBonus ?? 0
+  const cardBonus = passiveBonus + turnBonus
   const bonus = next.boost
+  const multiplier = next.player.nextCardDoubled ? 2 : 1
+  if (next.player.nextCardDoubled) next.player.nextCardDoubled = false
+  const effectType = next.player.cardsAsAttackUntilEndTurn ? 'attack' : card.card.effectType
   let summary = ''
-  switch (card.card.effectType) {
+  switch (effectType) {
     case 'attack': {
-      const amount = 2 + level + bonus + cardBonus
+      const amount = spellingBonus(card.face, 2 + level + bonus + cardBonus) * multiplier
       const { blocked, damage } = dealDamageToEnemy(next, amount)
       next.boost = 0
       summary = blocked > 0 ? `造成 ${damage} 点伤害，击破 ${blocked} 点护盾` : `对敌人造成 ${amount} 点伤害`
       break
     }
     case 'shield': {
-      const amount = 3 + level + bonus + cardBonus
+      const amount = spellingBonus(card.face, 3 + level + bonus + cardBonus) * multiplier
       const result = addPlayerShield(next, amount)
       next.boost = 0
       summary = result.overflow > 0
@@ -141,11 +194,11 @@ export function applyCardEffect(state: BattleState, card: RuntimeCard): { state:
       break
     }
     case 'boost':
-      next.boost += 2 + level
-      summary = `下一张攻击或护盾牌强化 ${2 + level} 点`
+      next.boost += spellingBonus(card.face, 2 + level) * multiplier
+      summary = `下一张攻击或护盾牌强化 ${spellingBonus(card.face, 2 + level) * multiplier} 点`
       break
     case 'draw': {
-      const amount = 1 + Math.floor(level / 2)
+      const amount = spellingBonus(card.face, 1 + Math.floor(level / 2)) * multiplier
       const needsSpelling = !next.hand.some((item) => item.face === 'spelling')
       next.hand = [...next.hand, ...makeRuntimeCards(next.drawPile.slice(0, amount), Math.random, needsSpelling)].slice(0, MAX_HAND)
       next.drawPile = next.drawPile.slice(Math.min(amount, next.drawPile.length))
@@ -153,7 +206,7 @@ export function applyCardEffect(state: BattleState, card: RuntimeCard): { state:
       break
     }
     case 'heal': {
-      const amount = 5 + level
+      const amount = spellingBonus(card.face, 5 + level) * multiplier
       const healed = Math.min(amount, next.player.maxHp - next.player.hp)
       next.player.hp += healed
       summary = healed > 0 ? `回复 ${healed} 点生命` : '生命已满，未产生回复'
@@ -166,7 +219,16 @@ export function applyCardEffect(state: BattleState, card: RuntimeCard): { state:
 export function dealDamageToEnemy(state: BattleState, amount: number): { blocked: number; damage: number } {
   const blocked = Math.min(state.enemy.shield, Math.max(0, amount))
   const damage = Math.max(0, amount - blocked)
+  state.turnDamageDealt = (state.turnDamageDealt ?? 0) + damage
   state.enemy.shield -= blocked
+  const reviveAbility = state.enemy.abilities.find((ability) => ability.type === 'revive-once')
+  if (damage > 0 && !state.enemy.reviveUsed && reviveAbility && state.enemy.hp - damage <= 0) {
+    state.enemy.reviveUsed = true
+    state.enemy.shield = 0
+    state.enemy.hp = Math.max(1, Math.round(state.enemy.maxHp * Math.min(100, reviveAbility.amount) / 100))
+    state.log = [`${state.enemy.name} 触发一次复活，恢复至 ${state.enemy.hp} 点生命。`, ...state.log].slice(0, 8)
+    return { blocked, damage }
+  }
   state.enemy.hp = Math.max(0, state.enemy.hp - damage)
   return { blocked, damage }
 }
@@ -180,7 +242,7 @@ export function addPlayerShield(state: BattleState, amount: number): { gained: n
   return { gained, overflow, blocked, damage }
 }
 
-/** Turn draws are allowed to overflow the hand; each overflow card is discarded for 1 HP. */
+/** Turn draws are allowed to overflow the hand; each overflow card deals 2 true damage. */
 export function drawTurnCards(state: BattleState, cards: import('../shared/domain-types').CardRecord[]): { state: BattleState; overflow: number } {
   const next = structuredClone(state) as BattleState
   const availableSlots = Math.max(0, MAX_HAND - next.hand.length)
@@ -191,7 +253,7 @@ export function drawTurnCards(state: BattleState, cards: import('../shared/domai
   next.discardCount += overflow
   next.player.hp = Math.max(0, next.player.hp - overflow * FULL_HAND_DAMAGE)
   if (overflow > 0) {
-    next.log = [`手牌已满，${overflow} 张抽到的牌进入弃牌堆，受到 ${overflow * FULL_HAND_DAMAGE} 点伤害。`, ...next.log].slice(0, 8)
+    next.log = [`手牌已满，${overflow} 张抽到的牌进入弃牌堆，受到 ${overflow * FULL_HAND_DAMAGE} 点真实伤害。`, ...next.log].slice(0, 8)
   }
   if (next.player.hp <= 0) next.status = 'defeat'
   return { state: next, overflow }
@@ -276,26 +338,60 @@ export function campaignEnemyProgress(state: BattleState): { current: number; to
 export function finishEnemyTurn(state: BattleState): BattleState {
   const next = structuredClone(state) as BattleState
   const enemyTurn = next.enemy.turns + 1
+  next.enemy.turns = enemyTurn
+  next.enemy.abilityCooldowns = Object.fromEntries(Object.entries(next.enemy.abilityCooldowns ?? {}).map(([id, cooldown]) => [id, Math.max(0, cooldown - 1)]))
+
+  const instantKill = next.enemy.abilities.find((ability) => ability.type === 'instant-kill-at-turn')
+  if (instantKill && enemyTurn >= (instantKill.turnLimit ?? 0)) {
+    next.player.hp = 0
+    next.status = 'defeat'
+    next.log = [`${next.enemy.name} 触发即死效果，战斗失败。`, ...next.log].slice(0, 8)
+    return next
+  }
+
   const shieldGain = next.enemy.abilities.filter((ability) => ability.type === 'fixed-shield-per-turn').reduce((sum, ability) => sum + ability.amount, 0)
   next.enemy.shield = Math.min(MAX_SHIELD, next.enemy.shield + shieldGain)
   const healGain = next.enemy.abilities.filter((ability) => ability.type === 'heal-per-turn').reduce((sum, ability) => sum + ability.amount, 0)
   next.enemy.hp = Math.min(next.enemy.maxHp, next.enemy.hp + healGain)
-  next.enemy.turns = enemyTurn
   const incoming = enemyAttack(next)
-  const blocked = Math.min(next.player.shield, incoming)
-  const damage = incoming - blocked
   const directDamage = next.enemy.abilities.filter((ability) => ability.type === 'direct-damage-per-turn').reduce((sum, ability) => sum + ability.amount, 0)
-  const shieldPiercing = next.player.shield > 0
+  const shieldBreaker = next.player.shield > 0
     ? next.enemy.abilities.filter((ability) => ability.type === 'shield-breaker').reduce((sum, ability) => sum + ability.amount, 0)
     : 0
+  const shieldIgnore = next.enemy.abilities.find((ability) => ability.type === 'shield-ignore')
+  const ignoresShield = Boolean(shieldIgnore && (next.enemy.abilityCooldowns?.['shield-ignore'] ?? 0) === 0)
+  let blocked = 0
+  let damage = 0
+  let shieldPiercing = 0
+  if (next.player.immuneThisTurn) {
+    blocked = incoming
+    if (next.player.reflectThisTurn) dealDamageToEnemy(next, incoming)
+  } else if (ignoresShield) {
+    damage = incoming
+    if (shieldIgnore) next.enemy.abilityCooldowns = { ...(next.enemy.abilityCooldowns ?? {}), 'shield-ignore': shieldIgnore.cooldown ?? 0 }
+  } else {
+    blocked = Math.min(next.player.shield, incoming)
+    damage = incoming - blocked
+    shieldPiercing = shieldBreaker
+  }
   next.player.shield = 0
   next.player.hp = Math.max(0, next.player.hp - damage - directDamage - shieldPiercing)
   next.turn += 1
   next.player.energy = TURN_ENERGY
   next.boost = 0
   next.character.cooldowns = Object.fromEntries(Object.entries(next.character.cooldowns).map(([id, cooldown]) => [id, Math.max(0, cooldown - 1)]))
+  next.lastTurnDamageDealt = next.turnDamageDealt ?? 0
+  next.lastTurnCorrectEffectiveCards = next.turnCorrectEffectiveCards ?? 0
+  next.turnDamageDealt = 0
+  next.turnCorrectEffectiveCards = 0
+  next.player.immuneThisTurn = false
+  next.player.reflectThisTurn = false
+  next.player.turnCardBonus = 0
+  next.player.cardsAsAttackUntilEndTurn = false
   const passiveHeal = next.character.abilities.filter((ability) => ability.type === 'passive-heal-per-turn').reduce((sum, ability) => sum + ability.amount, 0)
   if (passiveHeal > 0 && next.player.hp > 0) next.player.hp = Math.min(next.player.maxHp, next.player.hp + passiveHeal)
+  const passiveShield = next.character.abilities.filter((ability) => ability.type === 'passive-shield-per-turn').reduce((sum, ability) => sum + ability.amount, 0)
+  if (passiveShield > 0 && next.player.hp > 0) next.player.shield = Math.min(MAX_SHIELD, passiveShield)
   next.log = [`${next.enemy.name} 攻击 ${incoming} 点，获得 ${shieldGain} 点护盾，恢复 ${healGain} 点生命，额外造成 ${directDamage + shieldPiercing} 点伤害，己方护盾抵挡 ${blocked} 点，受到 ${damage + directDamage + shieldPiercing} 点伤害。`, ...next.log].slice(0, 8)
   if (next.player.hp <= 0) next.status = 'defeat'
   return next

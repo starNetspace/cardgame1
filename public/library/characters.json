@@ -1,89 +1,128 @@
 {
-  "version": 2,
-  "selectedCharacterId": "memory-sentinel",
+  "version": 3,
+  "selectedCharacterId": "sherry-striker",
   "characters": [
     {
-      "id": "ember-striker",
-      "name": "EMBER STRIKER",
-      "subtitle": "安安",
-      "avatar": "Pin_AnAn.png",
-      "maxHp": 28,
-      "shield": 0,
-      "abilities": [
-        { "id": "ember-burst", "kind": "active", "type": "active-damage", "amount": 7, "cooldown": 3, "description": "主动：对敌人造成 7 点伤害，冷却 3 回合" },
-        { "id": "heated-edges", "kind": "passive", "type": "passive-card-bonus", "amount": 1, "description": "攻击牌和防御牌数值 +1" }
-      ]
-    },
-    {
-      "id": "memory-sentinel",
-      "name": "MEMORY SENTINEL",
-      "subtitle": "亚里沙",
-      "avatar": "Pin_Alisa.png",
-      "maxHp": 30,
-      "shield": 0,
-      "abilities": [
-        { "id": "steady-mind", "kind": "passive", "type": "passive-start-shield", "amount": 2, "description": "战斗开始时获得 2 点护盾" },
-        { "id": "calm-recovery", "kind": "passive", "type": "passive-heal-per-turn", "amount": 1, "description": "每回合结束后回复 1 点生命" }
-      ]
-    },
-    {
-      "id": "ward-weaver",
-      "name": "WARD WEAVER",
-      "subtitle": "可可",
-      "avatar": "Pin_Coco.png",
-      "maxHp": 26,
-      "shield": 1,
-      "abilities": [
-        { "id": "woven-ward", "kind": "active", "type": "active-shield", "amount": 8, "cooldown": 2, "description": "主动：获得 8 点护盾，冷却 2 回合" },
-        { "id": "iron-memory", "kind": "passive", "type": "passive-max-hp", "amount": 4, "description": "最大生命增加 4 点" }
-      ]
-    },
-    {
-      "id": "recall-medic",
-      "name": "RECALL MEDIC",
+      "id": "ema-cleaver",
+      "name": "EMA",
       "subtitle": "艾玛",
-      "avatar": "Pin_Ema.png",
-      "maxHp": 30,
-      "shield": 0,
-      "abilities": [
-        { "id": "quick-recall", "kind": "active", "type": "active-heal", "amount": 6, "cooldown": 3, "description": "主动：回复 6 点生命，冷却 3 回合" },
-        { "id": "field-triage", "kind": "passive", "type": "passive-heal-per-turn", "amount": 1, "description": "每回合结束后回复 1 点生命" }
-      ]
-    },
-    {
-      "id": "focus-archivist",
-      "name": "FOCUS ARCHIVIST",
-      "subtitle": "汉娜",
-      "avatar": "Pin_Hanna.png",
-      "maxHp": 27,
-      "shield": 0,
-      "abilities": [
-        { "id": "deep-focus", "kind": "passive", "type": "passive-card-bonus", "amount": 1, "description": "攻击牌和防御牌数值 +1" },
-        { "id": "focus-strike", "kind": "active", "type": "active-damage", "amount": 5, "cooldown": 2, "description": "主动：对敌人造成 5 点伤害，冷却 2 回合" }
-      ]
-    },
-    {
-      "id": "aegis-runner",
-      "name": "AEGIS RUNNER",
-      "subtitle": "蕾雅",
-      "avatar": "Pin_Leia.png",
-      "maxHp": 29,
-      "shield": 2,
-      "abilities": [
-        { "id": "opening-aegis", "kind": "passive", "type": "passive-start-shield", "amount": 3, "description": "战斗开始时额外获得 3 点护盾" },
-        { "id": "emergency-ward", "kind": "active", "type": "active-shield", "amount": 6, "cooldown": 2, "description": "主动：获得 6 点护盾，冷却 2 回合" }
-      ]
-    },
-    {
-      "id": "last-recall",
-      "name": "LAST RECALL",
-      "subtitle": "雪莉",
-      "avatar": "Pin_Sherry.png",
+      "avatar": "Ema.png",
       "maxHp": 25,
       "shield": 0,
       "abilities": [
-        { "id": "last-stand", "kind": "passive", "type": "passive-max-hp", "amount": 5, "description": "最大生命增加 5 点" },
-        { "id": "final-answer", "kind": "active", "type": "active-heal", "amount": 8, "cooldown": 4, "description": "主动：回复 8 点生命，冷却 4 回合" }
+        { "id": "ema-reset", "kind": "active", "type": "active-clear-shield-convert", "amount": 1, "cooldown": 3, "description": "主动：清空敌方护盾，本回合所有手牌按同级攻击牌结算，冷却 3 回合" }
+      ]
+    },
+    {
+      "id": "anan-guard",
+      "name": "ANAN",
+      "subtitle": "安安",
+      "avatar": "AnAn.png",
+      "maxHp": 25,
+      "shield": 0,
+      "abilities": [
+        { "id": "anan-counter", "kind": "active", "type": "active-immunity-reflect", "amount": 1, "cooldown": 3, "description": "主动：本回合免疫敌方伤害并按原伤害 1:1 反伤，冷却 3 回合" }
+      ]
+    },
+    {
+      "id": "sherry-striker",
+      "name": "SHERRY",
+      "subtitle": "雪莉",
+      "avatar": "Sherry.png",
+      "maxHp": 29,
+      "shield": 0,
+      "abilities": [
+        { "id": "sherry-burst", "kind": "active", "type": "active-damage", "amount": 7, "cooldown": 2, "description": "主动：对敌人造成 7 点伤害，冷却 2 回合" },
+        { "id": "sherry-edge", "kind": "passive", "type": "passive-card-bonus", "amount": 1, "description": "被动：攻击牌伤害 +1" }
+      ]
+    },
+    {
+      "id": "hanna-aegis",
+      "name": "HANNA",
+      "subtitle": "汉娜",
+      "avatar": "Hanna.png",
+      "maxHp": 35,
+      "shield": 2,
+      "abilities": [
+        { "id": "hanna-ward", "kind": "passive", "type": "passive-shield-per-turn", "amount": 2, "description": "被动：每回合结束清盾后获得 2 点护盾" }
+      ]
+    },
+    {
+      "id": "meruru-drain",
+      "name": "MERURU",
+      "subtitle": "梅露露",
+      "avatar": "Meruru.png",
+      "maxHp": 32,
+      "shield": 0,
+      "abilities": [
+        { "id": "meruru-syphon", "kind": "active", "type": "active-heal-current-hp-damage", "amount": 5, "cooldown": 5, "description": "主动：回复 5 点生命，再造成当前生命等额伤害，冷却 5 回合" }
+      ]
+    },
+    {
+      "id": "nanoka-echo",
+      "name": "NANOKA",
+      "subtitle": "奈叶香",
+      "avatar": "Nanoka.png",
+      "maxHp": 28,
+      "shield": 0,
+      "abilities": [
+        { "id": "nanoka-repeat", "kind": "active", "type": "active-repeat-last-turn-damage", "amount": 0, "cooldown": 3, "description": "主动：重复上一回合对敌人造成的实际生命伤害，冷却 3 回合" }
+      ]
+    },
+    {
+      "id": "margo-amp",
+      "name": "MARGO",
+      "subtitle": "玛格",
+      "avatar": "Margo.png",
+      "maxHp": 27,
+      "shield": 0,
+      "abilities": [
+        { "id": "margo-double", "kind": "active", "type": "active-double-next-card", "amount": 2, "cooldown": 3, "description": "主动：下一张有效手牌效果翻倍，冷却 3 回合" }
+      ]
+    },
+    {
+      "id": "miria-swap",
+      "name": "MIRIA",
+      "subtitle": "米莉亚",
+      "avatar": "Miria.png",
+      "maxHp": 31,
+      "shield": 0,
+      "abilities": [
+        { "id": "miria-exchange", "kind": "active", "type": "active-swap-health-shield", "amount": 0, "cooldown": 3, "description": "主动：交换双方当前生命与护盾，冷却 3 回合" }
+      ]
+    },
+    {
+      "id": "alisa-surge",
+      "name": "ALISA",
+      "subtitle": "亚里沙",
+      "avatar": "Alisa.png",
+      "maxHp": 27,
+      "shield": 0,
+      "abilities": [
+        { "id": "alisa-boost", "kind": "active", "type": "active-turn-card-bonus", "amount": 2, "cooldown": 3, "description": "主动：本回合攻击牌和护盾牌数值 +2，冷却 3 回合" }
+      ]
+    },
+    {
+      "id": "coco-tempo",
+      "name": "COCO",
+      "subtitle": "可可",
+      "avatar": "Coco.png",
+      "maxHp": 27,
+      "shield": 0,
+      "abilities": [
+        { "id": "coco-energy", "kind": "active", "type": "active-gain-energy", "amount": 2, "cooldown": 3, "description": "主动：按上一回合有效答对牌数增加行动力，最多 +2，冷却 3 回合" }
+      ]
+    },
+    {
+      "id": "leia-reckless",
+      "name": "LEIA",
+      "subtitle": "蕾雅",
+      "avatar": "Leia.png",
+      "maxHp": 31,
+      "shield": 0,
+      "abilities": [
+        { "id": "leia-risk", "kind": "passive", "type": "passive-wrong-penalty", "amount": 2, "description": "被动：答错或放弃时额外受到 2 点真实伤害" },
+        { "id": "leia-focus", "kind": "passive", "type": "passive-card-bonus", "amount": 1, "description": "被动：攻击牌和护盾牌数值 +1" }
       ]
     }
   ]
