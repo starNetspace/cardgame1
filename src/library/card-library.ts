@@ -77,8 +77,10 @@ export function cleanCardRecords(raw: unknown): CardRecord[] {
     if (seen.has(key)) continue
     seen.add(key)
 
-    output.push({
-      cardId: typeof source.cardId === 'string' ? source.cardId : `card-${output.length + 1}`,
+    // Each word entry is split into two cards: a meaning card and a spelling
+    // card. The meaning card keeps the original id; the spelling card appends
+    // a `-spelling` suffix so both faces of the same word+pos can coexist.
+    const base = {
       word,
       phonetic: typeof source.phonetic === 'string' ? source.phonetic : '',
       pos: pos || 'unknown',
@@ -86,7 +88,10 @@ export function cleanCardRecords(raw: unknown): CardRecord[] {
       frequencyLevel: level as FrequencyLevel,
       frequencyLabel: typeof source.frequencyLabel === 'string' ? source.frequencyLabel : `等级 ${level}`,
       effectType: effectForPos(pos),
-    })
+    }
+    const cardId = typeof source.cardId === 'string' ? source.cardId : `card-${output.length + 1}`
+    output.push({ ...base, cardId, face: 'meaning' as CardFace })
+    output.push({ ...base, cardId: `${cardId}-spelling`, face: 'spelling' as CardFace })
   }
   return output
 }
@@ -328,19 +333,11 @@ export function drawLearningCards(
   return result
 }
 
-export function makeRuntimeCards(cards: CardRecord[], random: () => number = Math.random, ensureSpelling = cards.length > 1): import('../shared/domain-types').RuntimeCard[] {
-  const runtimeCards = cards.map((card, index) => ({
+export function makeRuntimeCards(cards: CardRecord[]): import('../shared/domain-types').RuntimeCard[] {
+  // The face is intrinsic to the card now; no random assignment is needed.
+  return cards.map((card, index) => ({
     card,
     instanceId: `${card.cardId}-${Date.now()}-${index}`,
-    face: (random() < 0.6 ? 'meaning' : 'spelling') as CardFace,
+    face: card.face,
   }))
-
-  // A fresh hand must always offer both study modes when there is room for them.
-  // Keep the random assignment, but avoid an all-meaning opening hand.
-  if (ensureSpelling && runtimeCards.length > 0 && runtimeCards.every((card) => card.face === 'meaning')) {
-    const forcedIndex = Math.floor(random() * runtimeCards.length)
-    runtimeCards[forcedIndex].face = 'spelling'
-  }
-
-  return runtimeCards
 }

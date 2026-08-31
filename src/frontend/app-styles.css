@@ -188,6 +188,9 @@ body { color: var(--cream); background: var(--bg); }
 .library-meta { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 .library-meta .level-dot { flex: 0 0 auto; }
 .library-meta small { color: var(--muted); font: 10px 'DM Mono'; text-align: right; }
+.library-face-tag { flex: 0 0 auto; padding: 2px 7px; border-radius: 3px; font: 10px 'DM Mono'; }
+.library-face-tag.face-meaning { color: #845538; background: #ead1bb; }
+.library-face-tag.face-spelling { color: #fffaf5; background: #4f9d69; }
 .library-load-more { display: flex; margin: 24px auto 0; }
 .library-empty { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 180px; color: var(--muted); }
 .library-empty svg { color: var(--cyan); }
@@ -519,6 +522,15 @@ body { color: var(--cream); background: var(--bg); }
 .mistake-book-review { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; padding-bottom: 4px; }
 .mistake-book-review small { color: var(--muted); font: 10px 'DM Mono'; }
 .review-next-due { margin: 0 0 16px; color: var(--muted); font: 12px 'DM Mono'; }
+.grade-filter-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.grade-filter-button { min-height: 30px; padding: 0 14px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; background: transparent; font: 11px 'DM Mono'; cursor: pointer; transition: .18s ease; }
+.grade-filter-button:hover { color: var(--cream); border-color: var(--muted); }
+.grade-filter-button.active { color: #fffaf5; border-color: transparent; }
+.grade-filter-button.grade-all.active { background: var(--cyan); }
+.grade-filter-button.grade-bronze.active { background: #b77b56; }
+.grade-filter-button.grade-silver.active { background: #8f93a1; }
+.grade-filter-button.grade-gold.active { background: #c59655; }
+.grade-filter-button.grade-mastered.active { background: #4f9d69; }
 
 .memory-summary {
   display: grid;

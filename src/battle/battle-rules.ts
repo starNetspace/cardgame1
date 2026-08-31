@@ -211,11 +211,10 @@ export function applyCardEffect(state: BattleState, card: RuntimeCard): { state:
       break
     case 'draw': {
       const amount = spellingBonus(card.face, 1 + Math.floor(level / 2)) * multiplier
-      const needsSpelling = !next.hand.some((item) => item.face === 'spelling')
       const drawn = next.drawPile.slice(0, amount)
       const accepted = drawn.slice(0, Math.max(0, MAX_HAND - next.hand.length))
       const overflowCards = drawn.slice(accepted.length)
-      next.hand = [...next.hand, ...makeRuntimeCards(accepted, Math.random, needsSpelling)]
+      next.hand = [...next.hand, ...makeRuntimeCards(accepted)]
       next.drawPile = [...next.drawPile.slice(Math.min(amount, next.drawPile.length)), ...overflowCards]
       summary = overflowCards.length > 0 ? `抽取 ${amount} 张牌，手牌已满，${overflowCards.length} 张放回牌库` : `抽取 ${amount} 张牌`
       break
@@ -267,8 +266,7 @@ export function drawTurnCards(state: BattleState, cards: import('../shared/domai
   const accepted = cards.slice(0, availableSlots)
   const overflowCards = cards.slice(availableSlots)
   const overflow = overflowCards.length
-  const needsSpelling = !next.hand.some((item) => item.face === 'spelling')
-  next.hand = [...next.hand, ...makeRuntimeCards(accepted, Math.random, needsSpelling)]
+  next.hand = [...next.hand, ...makeRuntimeCards(accepted)]
   if (overflow > 0) {
     // Overflow cards return to the draw pile so they are never lost from a learning run.
     next.drawPile = [...next.drawPile, ...overflowCards]

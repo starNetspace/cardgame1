@@ -4,20 +4,23 @@ import { buildMeaningQuestion, isSpellingCorrect } from './question-engine'
 import { addPlayerShield, advanceCampaignEnemy, applyCardEffect, canCompleteLearningDeck, createBattle, dealDamageToEnemy, drawTurnCards, effectDescription, enemyAttack, finishEnemyTurn, markLearningCardCorrect, protectLearningBattle, returnLearningCardToQueue, TURN_ENERGY, useCharacterAbility } from './battle-rules'
 import type { CharacterDefinition, EnemyDefinition, RuntimeCard } from '../shared/domain-types'
 
-const cards = cleanCardRecords([
+const rawCards = [
   { cardId: 'a', word: 'abandon', phonetic: '', pos: 'v', meaning: '放弃；(Abandon)人名', frequencyLevel: 2, frequencyLabel: '较高频' },
   { cardId: 'b', word: 'ability', phonetic: '', pos: 'n', meaning: '能力', frequencyLevel: 3, frequencyLabel: '中频' },
   { cardId: 'c', word: 'able', phonetic: '', pos: 'adj', meaning: '有能力的', frequencyLevel: 1, frequencyLabel: '高频' },
   { cardId: 'd', word: 'abroad', phonetic: '', pos: 'adv', meaning: '在国外', frequencyLevel: 4, frequencyLabel: '低频' },
   { cardId: 'e', word: 'after', phonetic: '', pos: 'conj', meaning: '之后', frequencyLevel: 5, frequencyLabel: '罕见' },
-])
+]
+const allCards = cleanCardRecords(rawCards)
+const cards = allCards.filter((card) => card.face === 'meaning')
+const spellingCards = allCards.filter((card) => card.face === 'spelling')
 const meaningCards = cleanCardRecords([
-  ...cards,
+  ...rawCards,
   { cardId: 'f', word: 'build', phonetic: '', pos: 'v', meaning: '建造', frequencyLevel: 1 },
   { cardId: 'g', word: 'carry', phonetic: '', pos: 'v', meaning: '携带', frequencyLevel: 1 },
   { cardId: 'h', word: 'decide', phonetic: '', pos: 'v', meaning: '决定', frequencyLevel: 1 },
   { cardId: 'i', word: 'explain', phonetic: '', pos: 'v', meaning: '解释', frequencyLevel: 1 },
-])
+]).filter((card) => card.face === 'meaning')
 
 const runtime = (card = cards[0], face: RuntimeCard['face'] = 'meaning'): RuntimeCard => ({ card, face, instanceId: `${card.cardId}-1` })
 
@@ -34,7 +37,7 @@ describe('card data and questions', () => {
     expect(cleanCardRecords([
       { cardId: 'person-appendix', word: 'pope', pos: 'n', meaning: '蒲伯（英国诗人）；罗马教皇', frequencyLevel: 1 },
       { cardId: 'standalone-name', word: 'temple', pos: 'n', meaning: '庙宇；（Temple）', frequencyLevel: 1 },
-    ].map((item) => ({ ...item, phonetic: '' }))).map((item) => item.meaning)).toEqual(['罗马教皇', '庙宇'])
+    ].map((item) => ({ ...item, phonetic: '' }))).filter((item) => item.face === 'meaning').map((item) => item.meaning)).toEqual(['罗马教皇', '庙宇'])
     expect(cleanCardRecords([
       { cardId: 'spaced-name', word: 'toward', pos: 'n', meaning: '(Toward) （美、加、沙特）特沃德', frequencyLevel: 1 },
     ])).toHaveLength(0)
@@ -60,9 +63,10 @@ describe('battle rules', () => {
     const result = drawCards(cards, {}, 5, () => 0.1)
     expect(new Set(result.map((item) => item.word)).size).toBe(5)
   })
-  it('keeps at least one spelling card in a multi-card hand', () => {
-    const hand = makeRuntimeCards(cards, () => 0.1)
+  it('produces both meaning and spelling runtime cards from the split deck', () => {
+    const hand = makeRuntimeCards(allCards)
     expect(hand.some((card) => card.face === 'spelling')).toBe(true)
+    expect(hand.some((card) => card.face === 'meaning')).toBe(true)
   })
   it('resolves a correct attack and a direct wrong-answer hit', () => {
     const battle = createBattle([], [])

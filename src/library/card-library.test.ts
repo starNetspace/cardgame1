@@ -3,7 +3,7 @@ import { chooseCampaignEnemies, getCardWeight, getLearningCardWeight, isCampaign
 import type { CampaignConfig, CardRecord, LearningStore, ReviewRecord, ReviewStore } from '../shared/domain-types'
 
 const card: CardRecord = {
-  cardId: 'card-1', word: 'abandon', phonetic: '', pos: 'v', meaning: '放弃',
+  cardId: 'card-1', face: 'meaning', word: 'abandon', phonetic: '', pos: 'v', meaning: '放弃',
   frequencyLevel: 2, frequencyLabel: 'L2', effectType: 'attack',
 }
 

@@ -79,6 +79,7 @@ export interface CampaignConfig {
 
 export interface CardRecord {
   cardId: string
+  face: CardFace
   word: string
   phonetic: string
   pos: string
