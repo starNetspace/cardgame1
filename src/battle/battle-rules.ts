@@ -1,4 +1,4 @@
-import type { BattleMode, BattleState, CharacterAbility, CharacterDefinition, CharacterState, EnemyDefinition, EffectType, RuntimeCard } from '../shared/domain-types'
+import type { BattleMode, BattleState, CardRecord, CharacterAbility, CharacterDefinition, CharacterState, EnemyDefinition, EffectType, RuntimeCard } from '../shared/domain-types'
 import { makeRuntimeCards } from '../library/card-library'
 
 export const MAX_HAND = 8
@@ -26,6 +26,17 @@ export function effectLabel(type: EffectType): string {
 
 function spellingBonus(face: RuntimeCard['face'], value: number): number {
   return face === 'spelling' ? Math.ceil(value * SPELLING_BONUS_MULTIPLIER) : value
+}
+
+/** The card's own effect value by its original type, used when Ema converts cards into attacks. */
+function effectBaseValue(card: CardRecord): number {
+  switch (card.effectType) {
+    case 'attack': return 2 + card.frequencyLevel
+    case 'shield': return 3 + card.frequencyLevel
+    case 'boost': return 2 + card.frequencyLevel
+    case 'draw': return 1 + Math.floor(card.frequencyLevel / 2)
+    case 'heal': return 5 + card.frequencyLevel
+  }
 }
 
 export function effectDescription(card: RuntimeCard): string {
@@ -124,7 +135,7 @@ export function useCharacterAbility(state: BattleState, abilityId: string): { st
   } else if (ability.type === 'active-clear-shield-convert') {
     next.enemy.shield = 0
     next.player.cardsAsAttackUntilEndTurn = true
-    summary = '角色技能：敌方护盾已清空，本回合所有手牌将按同级攻击牌结算'
+    summary = '角色技能：敌方护盾已清空，本回合所有手牌按原本数值结算为攻击'
   } else if (ability.type === 'active-immunity-reflect') {
     next.player.immuneThisTurn = true
     next.player.reflectThisTurn = true
@@ -178,7 +189,8 @@ export function applyCardEffect(state: BattleState, card: RuntimeCard): { state:
   let summary = ''
   switch (effectType) {
     case 'attack': {
-      const amount = spellingBonus(card.face, 2 + level + bonus + cardBonus) * multiplier
+      const baseValue = next.player.cardsAsAttackUntilEndTurn ? effectBaseValue(card.card) : 2 + level
+      const amount = spellingBonus(card.face, baseValue + bonus + cardBonus) * multiplier
       const { blocked, damage } = dealDamageToEnemy(next, amount)
       next.boost = 0
       summary = blocked > 0 ? `造成 ${damage} 点伤害，击破 ${blocked} 点护盾` : `对敌人造成 ${amount} 点伤害`

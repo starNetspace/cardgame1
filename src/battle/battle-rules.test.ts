@@ -318,7 +318,10 @@ describe('battle rules', () => {
     const emaNext = useCharacterAbility(emaBattle, 'clear')!.state
     expect(emaNext.enemy.shield).toBe(0)
     expect(emaNext.player.cardsAsAttackUntilEndTurn).toBe(true)
-    expect(applyCardEffect(emaNext, runtime(cards[1])).state.enemy.hp).toBe(35)
+    // cards[1] 是 L3 名词护盾牌：原本数值 3+3=6，被转换为攻击后敌人 40-6=34
+    expect(applyCardEffect(emaNext, runtime(cards[1])).state.enemy.hp).toBe(34)
+    // cards[2] 是 L1 形容词强化牌：原本数值 2+1=3，被转换为攻击后敌人 40-3=37
+    expect(applyCardEffect(emaNext, runtime(cards[2])).state.enemy.hp).toBe(37)
 
     const anan: CharacterDefinition = { id: 'anan', name: 'ANAN', subtitle: '安安', maxHp: 24, shield: 0, abilities: [{ id: 'immune', kind: 'active', type: 'active-immunity-reflect', amount: 1, cooldown: 3, description: '免疫反伤' }] }
     const ananBattle = createBattle([], [], 'practice', undefined, anan)

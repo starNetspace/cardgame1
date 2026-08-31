@@ -10,7 +10,7 @@
       "maxHp": 25,
       "shield": 0,
       "abilities": [
-        { "id": "ema-reset", "kind": "active", "type": "active-clear-shield-convert", "amount": 1, "cooldown": 3, "description": "主动：清空敌方护盾，本回合所有手牌按同级攻击牌结算，冷却 3 回合" }
+        { "id": "ema-reset", "kind": "active", "type": "active-clear-shield-convert", "amount": 1, "cooldown": 3, "description": "主动：清空敌方护盾，本回合所有手牌按原本数值结算为攻击，冷却 3 回合" }
       ]
     },
     {
