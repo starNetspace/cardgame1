@@ -1,9 +1,9 @@
 {
   "version": 3,
-  "selectedCharacterId": "sherry-striker",
+  "selectedCharacterId": "sherry",
   "characters": [
     {
-      "id": "ema-cleaver",
+      "id": "ema",
       "name": "EMA",
       "subtitle": "艾玛",
       "avatar": "Ema.png",
@@ -14,7 +14,7 @@
       ]
     },
     {
-      "id": "anan-guard",
+      "id": "anan",
       "name": "ANAN",
       "subtitle": "安安",
       "avatar": "AnAn.png",
@@ -25,7 +25,7 @@
       ]
     },
     {
-      "id": "sherry-striker",
+      "id": "sherry",
       "name": "SHERRY",
       "subtitle": "雪莉",
       "avatar": "Sherry.png",
@@ -37,7 +37,7 @@
       ]
     },
     {
-      "id": "hanna-aegis",
+      "id": "hanna",
       "name": "HANNA",
       "subtitle": "汉娜",
       "avatar": "Hanna.png",
@@ -48,7 +48,7 @@
       ]
     },
     {
-      "id": "meruru-drain",
+      "id": "meruru",
       "name": "MERURU",
       "subtitle": "梅露露",
       "avatar": "Meruru.png",
@@ -59,7 +59,7 @@
       ]
     },
     {
-      "id": "nanoka-echo",
+      "id": "nanoka",
       "name": "NANOKA",
       "subtitle": "奈叶香",
       "avatar": "Nanoka.png",
@@ -70,7 +70,7 @@
       ]
     },
     {
-      "id": "margo-amp",
+      "id": "margo",
       "name": "MARGO",
       "subtitle": "玛格",
       "avatar": "Margo.png",
@@ -81,7 +81,7 @@
       ]
     },
     {
-      "id": "miria-swap",
+      "id": "miria",
       "name": "MIRIA",
       "subtitle": "米莉亚",
       "avatar": "Miria.png",
@@ -92,7 +92,7 @@
       ]
     },
     {
-      "id": "alisa-surge",
+      "id": "alisa",
       "name": "ALISA",
       "subtitle": "亚里沙",
       "avatar": "Alisa.png",
@@ -103,7 +103,7 @@
       ]
     },
     {
-      "id": "coco-tempo",
+      "id": "coco",
       "name": "COCO",
       "subtitle": "可可",
       "avatar": "Coco.png",
@@ -114,7 +114,7 @@
       ]
     },
     {
-      "id": "leia-reckless",
+      "id": "leia",
       "name": "LEIA",
       "subtitle": "蕾雅",
       "avatar": "Leia.png",
@@ -127,3 +127,4 @@
     }
   ]
 }
+
