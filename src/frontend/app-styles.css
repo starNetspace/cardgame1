@@ -337,6 +337,10 @@ body { color: var(--cream); background: var(--bg); }
 .mistake-book-all .stats-panel { min-height: 0; }
 .mistake-book-all .panel-heading h2 { margin-bottom: 18px; }
 .mistake-book-list { display: grid; gap: 0; }
+.mistake-book-tabs-sub { display: flex; align-items: baseline; gap: 10px; margin-top: 20px; padding-bottom: 8px; color: var(--muted); border-bottom: 1px solid var(--line); font: 11px 'DM Mono'; }
+.mistake-book-tabs-sub strong { color: var(--cream); font: 600 20px 'DM Mono'; }
+.mistake-book-word { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.mistake-book-word strong { min-width: 0; overflow-wrap: anywhere; }
 .mistake-book-row { display: grid; grid-template-columns: minmax(110px, .7fr) 42px minmax(0, 1.3fr) 29px; align-items: center; gap: 12px; min-height: 58px; padding: 10px 0; border-bottom: 1px solid var(--line); }
 .mistake-book-row:last-child { border-bottom: 0; }
 .mistake-book-row strong { min-width: 0; overflow-wrap: anywhere; color: var(--cream); font: 600 14px 'Space Grotesk'; }
